@@ -959,7 +959,7 @@ async function salva(){
     const orig=nomeCartella();
     let src;
     try{src=await radice.getDirectoryHandle(orig);}
-    catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'» (di solito Documenti\\Registratore Azioni), non il progetto stesso');}
+    catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'», non il progetto stesso');}
     const radiceNome=orig.replace(/_modificato(_\d+)?$/,'')+'_modificato';
     let nome=radiceNome,k=2;
     while(await esiste(radice,nome))nome=radiceNome+'_'+(k++);
@@ -1029,6 +1029,8 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+const _lg=document.querySelector('img.logo'),_fv=document.getElementById('fav');
+if(_lg&&_fv)_fv.href=_lg.src;  /* stessa immagine del logo: niente copia in più nel file */
 render();
 </script>
 </body>
@@ -1042,7 +1044,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
     json_dati = json.dumps(dati, ensure_ascii=False).replace("<", "\\u003c")
     blocco = f'<!--DATI--><script id="dati" type="application/json">{json_dati}</script><!--/DATI-->'
     logo = logo_base64()
-    favicon = f'<link rel="icon" href="data:image/png;base64,{logo}">' if logo else ""
+    favicon = '<link id="fav" rel="icon" href="data:,">' if logo else ""
     img_logo = f'<img class="logo" alt="" src="data:image/png;base64,{logo}">' if logo else ""
     tema = TEMA_HTML if TEMA_HTML in ("scuro", "chiaro") else "scuro"
     colori_css = "\n".join(
@@ -1089,7 +1091,7 @@ IMPOSTAZIONI
 Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML) e se nascondere la barra del registratore dagli screenshot.
 
 MODIFICARE UN PROGETTO
-Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (di solito Documenti\\Registratore Azioni) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
+Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (la prima volta soltanto: poi se la ricorda) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
 
 LA PAGINA HTML
 • Clic su un'immagine: si apre nel lettore (frecce ← → per scorrere, Esc per chiudere, clic per ingrandire). La freccetta in alto a destra la apre da sola in una nuova scheda.
