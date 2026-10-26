@@ -40,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.3"
+VERSION = "1.4"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -188,29 +188,6 @@ def elenca_progetti(radice: Path) -> list:
     return sorted(trovati, key=lambda d: d.stat().st_mtime, reverse=True)
 
 
-def crea_copia_modificata(src: Path, titolo: str, testi: list) -> Path:
-    """Crea accanto al progetto una cartella «nome_modificato» con le nuove descrizioni.
-    L'originale non viene toccato."""
-    src = Path(src)
-    dati = json.loads((src / "passi.json").read_text(encoding="utf-8"))
-    base = re.sub(r"_modificato(_\d+)?$", "", src.name)
-    dest = unique_path(src.parent / f"{base}_modificato")
-    dest.mkdir()
-    if (src / "immagini").is_dir():
-        shutil.copytree(src / "immagini", dest / "immagini")
-    passi = dati.get("passi", [])
-    for p, t in zip(passi, testi):
-        t = t.strip() or p.get("testo", "")
-        if t != p.get("testo"):
-            p.setdefault("testo_originale", p.get("testo"))
-            p["testo"] = t
-    titolo = titolo.strip() or dati.get("titolo") or src.name
-    dati["titolo"] = titolo
-    scrivi_json_atomico(dest / "passi.json", dati)
-    genera_html(dest, titolo, passi, dati.get("modalita", ""), dati.get("creato", ""))
-    return dest
-
-
 def pulisci_nome(nome: str) -> str:
     nome = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", nome).strip().rstrip(".")
     return nome
@@ -252,6 +229,70 @@ def rettangolo_finestra(hwnd: int):
         return (r.left, r.top, r.right, r.bottom)
     except Exception:
         return (0, 0, 0, 0)
+
+
+def hwnd_finestra(widget) -> int:
+    """Finestra di primo livello (quella vera di Windows) di un widget Tk."""
+    try:
+        u = ctypes.windll.user32
+        u.GetAncestor.restype = ctypes.c_void_p
+        u.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        h = int(widget.winfo_id())
+        return int(u.GetAncestor(h, 2) or h)  # 2 = GA_ROOT
+    except Exception:
+        return 0
+
+
+def nascosta_da_cattura(hwnd: int) -> bool:
+    """Controlla che Windows abbia davvero escluso la finestra dagli screenshot."""
+    try:
+        u = ctypes.windll.user32
+        u.GetWindowDisplayAffinity.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        u.GetWindowDisplayAffinity.restype = wintypes.BOOL
+        v = wintypes.DWORD(0)
+        return bool(u.GetWindowDisplayAffinity(wintypes.HWND(hwnd), ctypes.byref(v))) and v.value == 0x11
+    except Exception:
+        return False
+
+
+def colora_titolo(hwnd: int, sfondo, testo, scuro: bool) -> None:
+    """Barra del titolo di Windows nello stesso colore dell'app (Windows 11; su Windows 10 almeno scura)."""
+    try:
+        dwm = ctypes.windll.dwmapi
+
+        def attr(n, v):
+            val = ctypes.c_int(v)
+            return dwm.DwmSetWindowAttribute(wintypes.HWND(hwnd), n, ctypes.byref(val), 4)
+
+        if attr(20, 1 if scuro else 0) != 0:   # DWMWA_USE_IMMERSIVE_DARK_MODE
+            attr(19, 1 if scuro else 0)        # versione vecchia di Windows 10
+        rgb = lambda c: c[0] | (c[1] << 8) | (c[2] << 16)
+        attr(35, rgb(sfondo))  # colore della barra del titolo
+        attr(34, rgb(sfondo))  # colore del bordo
+        attr(36, rgb(testo))   # colore del testo
+    except Exception:
+        pass
+
+
+def arrotonda_finestra(hwnd: int, w: int, h: int, diametro: int) -> None:
+    """Angoli arrotondati per la barra senza cornice (senza trasparenza, quindi resta nascondibile agli screenshot)."""
+    try:
+        g, u = ctypes.windll.gdi32, ctypes.windll.user32
+        g.CreateRoundRectRgn.restype = ctypes.c_void_p
+        g.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 6
+        u.SetWindowRgn.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.BOOL]
+        u.SetWindowRgn(wintypes.HWND(hwnd), g.CreateRoundRectRgn(0, 0, w + 1, h + 1, diametro, diametro), True)
+    except Exception:
+        pass
+
+
+def togli_arrotondamento(hwnd: int) -> None:
+    try:
+        u = ctypes.windll.user32
+        u.SetWindowRgn.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.BOOL]
+        u.SetWindowRgn(wintypes.HWND(hwnd), None, True)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -321,6 +362,7 @@ class Registratore:
         self.own_rect = (0, 0, 0, 0)
         self.ultimo_scroll = 0.0
         self.ultimo_box = None
+        self.maschera_barra = False  # True se Windows non nasconde la barra: la copro io negli screenshot
         self.mouse_ctl = mouse.Controller()
         self.contatore = 0
         self.creato = datetime.datetime.now().isoformat(timespec="seconds")
@@ -539,6 +581,11 @@ class Registratore:
             img = img.resize((max(1, int(img.width * scala)), max(1, int(img.height * scala))),
                              Image.Resampling.LANCZOS)
 
+        if self.maschera_barra and any(self.own_rect):
+            l, t, r_, b_ = self.own_rect
+            ImageDraw.Draw(img).rectangle([(l - mon["left"]) * scala, (t - mon["top"]) * scala,
+                                           (r_ - mon["left"]) * scala, (b_ - mon["top"]) * scala], fill=(22, 31, 45))
+
         spessore = max(3, round(4 * max(scala, 0.5)))
         raggio = max(16, int(38 * scala))
         d = ImageDraw.Draw(img)
@@ -662,63 +709,109 @@ HTML_TEMPLATE = r"""<!doctype html>
 <title>__TITOLO__</title>
 __FAVICON__
 <style>
-:root,:root[data-tema=chiaro]{--bg:#f4f6fa;--tx:#1b2433;--mut:#66748c;--ln:#d5dbe6;--ac:#4a3fe0}
-:root[data-tema=scuro]{--bg:#141b26;--tx:#e8edf5;--mut:#8c9ab0;--ln:#2a3649;--ac:#8fa9ff}
+:root,:root[data-tema=scuro]{
+  --fg:#f4f7fb;--mut:#a9b8cf;--card:rgba(255,255,255,.07);--cb:rgba(255,255,255,.13);
+  --vetro:rgba(255,255,255,.11);--vetro-h:rgba(255,255,255,.2);--campo:#1c2636;--sel:rgba(193,58,242,.2);
+  --a1:#3d6fff;--a2:#c13af2;--ok:#8be9b0;--err:#ffa08f;
+  --bg:linear-gradient(160deg,#18212e 0%,#223044 55%,#2c3b52 100%);
+  --glow1:rgba(14,70,254,.5);--glow2:rgba(127,66,247,.32);--sh:0 10px 30px rgba(0,0,0,.25)}
+:root[data-tema=chiaro]{
+  --fg:#1b2740;--mut:#5b6b88;--card:rgba(255,255,255,.72);--cb:rgba(255,255,255,.95);
+  --vetro:rgba(49,65,84,.1);--vetro-h:rgba(49,65,84,.2);--campo:#ffffff;--sel:rgba(176,47,224,.14);
+  --a1:#1f55ff;--a2:#b02fe0;--ok:#17724a;--err:#b42318;
+  --bg:linear-gradient(160deg,#f5f7fb 0%,#e6ebf6 55%,#d4daf2 100%);
+  --glow1:rgba(31,85,255,.16);--glow2:rgba(127,66,247,.22);--sh:0 10px 30px rgba(40,50,90,.12)}
 __COLORI_CSS__
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.55 "Segoe UI",system-ui,sans-serif}
-.wrap{max-width:860px;margin:0 auto;padding:34px 22px 90px}
-header{display:flex;gap:14px;align-items:center;padding-bottom:16px;border-bottom:2px solid var(--tx)}
-.logo{width:44px;height:44px;object-fit:contain;flex:none}
-h1{margin:0;font-size:1.45rem;line-height:1.2;letter-spacing:-.01em;outline:none}
-#sub,.m,.n{font-family:Consolas,"Cascadia Mono",monospace}
-#sub{color:var(--mut);font-size:.78rem;margin-top:3px}
-.tools{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.tools button{background:none;border:1px solid var(--ln);color:var(--tx);padding:5px 10px;font:inherit;font-size:.8rem;cursor:pointer}
-.tools button:hover{border-color:var(--tx)}
-.passo{display:grid;grid-template-columns:52px 1fr;padding:22px 0;border-bottom:1px solid var(--ln);break-inside:avoid}
-.passo{--az:var(--ac)}
-.n{font-weight:600;font-size:.95rem;color:var(--az);padding-top:1px}
-#legenda{display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 0 2px;font-size:.74rem;color:var(--mut)}
-#legenda span{display:inline-flex;align-items:center;gap:6px}
-.lg{--az:var(--ac)}
-#legenda i{width:12px;height:12px;border:2px solid var(--az);display:inline-block}
-.d{margin:0;font-weight:600;outline:none}
-.m{margin:2px 0 12px;color:var(--mut);font-size:.74rem}
+body{margin:0;min-height:100vh;color:var(--fg);font:15px/1.55 "Segoe UI",system-ui,sans-serif;
+  background:radial-gradient(60% 50% at 0% 100%,var(--glow1),transparent 70%),
+             radial-gradient(55% 45% at 100% 0%,var(--glow2),transparent 70%),var(--bg);
+  background-attachment:fixed}
+.wrap{max-width:880px;margin:0 auto;padding:26px 18px 120px}
+.top{display:flex;gap:14px;align-items:center;padding:16px 18px;border-radius:24px;
+  background:var(--card);border:1px solid var(--cb);box-shadow:var(--sh);backdrop-filter:blur(10px)}
+.logo{width:48px;height:48px;border-radius:14px;object-fit:contain;flex:none}
+.tit{min-width:0;flex:1}
+h1{margin:0;font-size:1.4rem;line-height:1.25;letter-spacing:-.01em;overflow-wrap:anywhere}
+#sub{color:var(--mut);font-size:.8rem;margin-top:2px}
+.tools{display:flex;gap:8px;flex:none}
+.ib{width:40px;height:40px;border-radius:50%;border:1px solid var(--cb);background:var(--vetro);color:var(--fg);
+  display:grid;place-items:center;cursor:pointer;text-decoration:none;padding:0;transition:background .12s}
+.ib:hover{background:var(--vetro-h)}
+.ib svg{width:20px;height:20px}
+.hint{margin:12px 6px 0;color:var(--mut);font-size:.8rem}
+#lista{display:grid;gap:16px;margin-top:18px}
+.passo{--az:#3d6fff;display:grid;grid-template-columns:42px 1fr;gap:6px 12px;padding:18px;border-radius:24px;
+  background:var(--card);border:1px solid var(--cb);box-shadow:var(--sh);break-inside:avoid}
+.n{width:34px;height:34px;border-radius:50%;background:var(--az);color:#fff;display:grid;place-items:center;
+  font:600 .85rem Consolas,"Cascadia Mono",monospace}
+.d{margin:4px 0 0;font-weight:600;overflow-wrap:anywhere}
+.m{margin:2px 0 12px;color:var(--mut);font-size:.78rem;overflow-wrap:anywhere}
+[data-ed]{border-radius:8px;outline:none;cursor:text;padding:1px 6px;margin-left:-6px;margin-right:-6px;transition:background .12s}
+[data-ed]:hover{background:var(--vetro)}
+[data-ed]:focus{background:var(--vetro);box-shadow:0 0 0 2px var(--a1)}
+[data-ed].cambiato{background:var(--sel)}
 figure{margin:0;position:relative}
-img.s{width:100%;height:auto;display:block;border:1px solid var(--ln);border-top:3px solid var(--az);cursor:zoom-in}
-.op{position:absolute;top:8px;right:8px;width:28px;height:28px;display:grid;place-items:center;background:var(--bg);color:var(--tx);border:1px solid var(--ln);text-decoration:none;opacity:0;transition:opacity .12s}
+img.s{width:100%;height:auto;display:block;border-radius:14px;border:1px solid var(--cb);cursor:zoom-in}
+.op{position:absolute;top:10px;right:10px;width:34px;height:34px;opacity:0;transition:opacity .12s;
+  background:var(--campo);box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.op svg{width:17px;height:17px}
 figure:hover .op{opacity:1}
 @media (hover:none){.op{opacity:1}}
-#lb{position:fixed;inset:0;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;overflow:auto;z-index:10}
+#sb{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;
+  padding:10px 12px 10px 20px;border-radius:999px;background:var(--campo);border:1px solid var(--cb);
+  box-shadow:0 12px 36px rgba(0,0,0,.35);z-index:5;max-width:calc(100vw - 24px)}
+#sb[hidden]{display:none}
+#sbt{font-weight:600;font-size:.9rem}
+.bt{border:0;border-radius:999px;padding:9px 18px;font:inherit;font-weight:600;font-size:.88rem;cursor:pointer;
+  color:var(--fg);background:var(--vetro);white-space:nowrap}
+.bt:hover{background:var(--vetro-h)}
+.bt.p{color:#fff;background:linear-gradient(90deg,var(--a1),var(--a2))}
+.bt.p:hover{filter:brightness(1.12);background:linear-gradient(90deg,var(--a1),var(--a2))}
+.bt[hidden]{display:none}
+#lb{position:fixed;inset:0;background:rgba(8,12,20,.94);display:flex;align-items:center;justify-content:center;overflow:auto;z-index:10}
 #lb[hidden]{display:none}
-#lb img{max-width:94vw;max-height:86vh;cursor:zoom-in}
-#lb img.z{max-width:none;max-height:none;cursor:zoom-out}
-#lb button,#lb a{position:fixed;background:rgba(255,255,255,.1);color:#fff;border:0;width:42px;height:42px;font-size:22px;display:grid;place-items:center;cursor:pointer;text-decoration:none}
-#lb button:hover,#lb a:hover{background:rgba(255,255,255,.22)}
-#lbx{top:14px;right:14px}#lbo{top:14px;right:64px}
+#lb img{max-width:94vw;max-height:86vh;border-radius:12px;cursor:zoom-in}
+#lb img.z{max-width:none;max-height:none;cursor:zoom-out;border-radius:0}
+#lb button,#lb a{position:fixed;background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:50%;width:44px;height:44px;
+  font-size:22px;display:grid;place-items:center;cursor:pointer;text-decoration:none}
+#lb button:hover,#lb a:hover{background:rgba(255,255,255,.24)}
+#lbx{top:14px;right:14px}#lbo{top:14px;right:68px}
 #lbp{left:14px;top:50%}#lbn{right:14px;top:50%}
-#lbc{position:fixed;bottom:0;left:0;right:0;padding:12px 70px;color:#ddd;font-size:.85rem;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
-@media print{:root[data-tema]{--bg:#fff;--tx:#000;--mut:#555;--ln:#bbb;--ac:#000}.tools,.op,#lb{display:none!important}}
+#lbc{position:fixed;bottom:0;left:0;right:0;padding:14px 70px;color:#ddd;font-size:.85rem;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+@media (max-width:560px){.top{flex-wrap:wrap}.tools{margin-left:auto}.passo{grid-template-columns:1fr}}
+@media print{
+  :root[data-tema]{--fg:#000;--mut:#555;--card:#fff;--cb:#ccc;--sh:none}
+  body{background:#fff}
+  .tools,.op,#lb,#sb,.hint{display:none!important}
+  .top,.passo{backdrop-filter:none;box-shadow:none}
+  [data-ed]:hover,[data-ed].cambiato{background:none}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-<header>
+<header class="top">
 __LOGO__
-<div><h1 id="titolo"></h1><div id="sub"></div></div>
+<div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
-<button id="btema">Tema</button>
-<button onclick="print()">PDF</button>
+<button class="ib" id="btema" type="button"></button>
+<button class="ib" id="bpdf" type="button" title="Salva in PDF"></button>
 </div>
 </header>
-<div id="legenda"></div>
+<p class="hint">Clicca sul titolo o su una descrizione per modificarla: la copia si salva in una nuova cartella «_modificato».</p>
 <div id="lista"></div>
+</div>
+
+<div id="sb" hidden>
+<span id="sbt"></span>
+<button class="bt" id="bann" type="button">Annulla</button>
+<button class="bt p" id="bsal" type="button">Salva copia</button>
 </div>
 
 <div id="lb" hidden>
 <button id="lbx" title="Chiudi (Esc)">✕</button>
-<a id="lbo" target="_blank" title="Apri l'immagine da sola">↗</a>
+<a id="lbo" target="_blank" title="Apri l'immagine da sola"></a>
 <button id="lbp" title="Precedente (←)">‹</button>
 <button id="lbn" title="Successivo (→)">›</button>
 <img id="lbi" alt="">
@@ -729,30 +822,61 @@ __DATI__
 <script>
 const D=JSON.parse(document.getElementById('dati').textContent);
 const $=s=>document.querySelector(s);
-let cur=-1;
 const pad=n=>String(n).padStart(2,'0');
+let cur=-1;
+const base={titolo:D.titolo,testi:D.passi.map(p=>p.testo)};
+
+/* ---- icone ---- */
+const ICONE={
+  sole:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  luna:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  pdf:'<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  apri:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'
+};
+const svg=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONE[n]+'</svg>';
 
 /* ---- tema ---- */
-try{const t=localStorage.getItem('tema');if(t)document.documentElement.dataset.tema=t;}catch(e){}
+function iconaTema(){
+  const scuro=document.documentElement.dataset.tema==='scuro';
+  $('#btema').innerHTML=svg(scuro?'sole':'luna');
+  $('#btema').title=scuro?'Tema chiaro':'Tema scuro';
+}
+try{const t=localStorage.getItem('tema');if(t==='scuro'||t==='chiaro')document.documentElement.dataset.tema=t;}catch(e){}
 $('#btema').onclick=()=>{
   const t=document.documentElement.dataset.tema==='scuro'?'chiaro':'scuro';
   document.documentElement.dataset.tema=t;
   try{localStorage.setItem('tema',t);}catch(e){}
+  iconaTema();
 };
+$('#bpdf').innerHTML=svg('pdf');
+$('#bpdf').onclick=()=>print();
+iconaTema();
 
-/* ---- pagina ---- */
-const NOMI_AZ=__NOMI_AZ__;
+/* ---- modifica cliccando sul testo ---- */
 const az=p=>p.az||(p.tipo==='drag'?'drag':p.tipo==='tasto'?'tasto':'sinistro');
-function legenda(){
-  const L=$('#legenda');L.textContent='';
-  const visti=[...new Set(D.passi.map(az))];
-  Object.keys(NOMI_AZ).filter(k=>visti.includes(k)).forEach(k=>{
-    const s=document.createElement('span');s.className='lg';s.dataset.az=k;
-    const i=document.createElement('i');s.append(i,NOMI_AZ[k]);L.append(s);
+function edita(el,riferimento,leggi,scrivi){
+  el.setAttribute('data-ed','');
+  el.contentEditable='plaintext-only';
+  if(el.contentEditable!=='plaintext-only')el.contentEditable='true';
+  el.spellcheck=false;el.title='Clicca per modificare';
+  let prima='';
+  const stato=()=>el.classList.toggle('cambiato',leggi()!==riferimento());
+  el.addEventListener('focus',()=>{prima=leggi();});
+  el.addEventListener('input',()=>{scrivi(el.textContent);stato();aggiorna();});
+  el.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();el.blur();}
+    else if(e.key==='Escape'){e.preventDefault();scrivi(prima);el.textContent=prima;stato();aggiorna();el.blur();}
   });
+  el.addEventListener('blur',()=>{
+    let t=el.textContent.replace(/\s+/g,' ').trim();
+    if(!t)t=riferimento();
+    scrivi(t);el.textContent=t;stato();aggiorna();
+  });
+  stato();
 }
 function render(){
-  $('#titolo').textContent=D.titolo;
+  const h=$('#titolo');h.textContent=D.titolo;
+  edita(h,()=>base.titolo,()=>D.titolo,t=>{D.titolo=t;document.title=t;});
   document.title=D.titolo;
   let dt=D.creato;
   try{dt=new Date(D.creato).toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'});}catch(e){}
@@ -761,18 +885,127 @@ function render(){
   D.passi.forEach((p,i)=>{
     const a=document.createElement('article');a.className='passo';a.dataset.az=az(p);
     const n=document.createElement('div');n.className='n';n.textContent=pad(p.n);
-    const c=document.createElement('div');
-    const d=document.createElement('p');d.className='d';d.textContent=p.testo;d.dataset.i=i;
+    const c=document.createElement('div');c.style.minWidth='0';
+    const d=document.createElement('p');d.className='d';d.textContent=p.testo;
+    edita(d,()=>base.testi[i],()=>p.testo,t=>{p.testo=t;});
     const m=document.createElement('p');m.className='m';m.textContent=p.ora+(p.finestra?' · '+p.finestra:'');
     const f=document.createElement('figure');
     const im=document.createElement('img');im.className='s';im.loading='lazy';im.src=p.img;im.alt='Passo '+p.n;
     im.addEventListener('click',()=>apriLb(i));
-    const o=document.createElement('a');o.className='op';o.href=p.img;o.target='_blank';o.title="Apri l'immagine da sola";o.textContent='↗';
+    const o=document.createElement('a');o.className='ib op';o.href=p.img;o.target='_blank';o.title="Apri l'immagine da sola";o.innerHTML=svg('apri');
     f.append(im,o);c.append(d,m,f);a.append(n,c);L.append(a);
   });
   if(!D.passi.length)L.textContent='Nessun passo registrato.';
-  legenda();
 }
+
+/* ---- barra «Salva copia» ---- */
+let nota='',occupato=false,timerNota=0;
+function modifiche(){
+  let n=D.passi.filter((p,i)=>p.testo!==base.testi[i]).length;
+  if(D.titolo!==base.titolo)n++;
+  return n;
+}
+function aggiorna(){
+  const n=modifiche();
+  const sb=$('#sb');
+  if(!n&&!nota){sb.hidden=true;return;}
+  sb.hidden=false;
+  $('#sbt').textContent=nota||(n===1?'1 modifica':n+' modifiche');
+  const mostra=n>0&&!occupato;
+  $('#bann').hidden=!mostra;$('#bsal').hidden=!mostra;
+}
+function avviso(t,ms){
+  nota=t;aggiorna();clearTimeout(timerNota);
+  if(ms)timerNota=setTimeout(()=>{nota='';aggiorna();},ms);
+}
+$('#bann').onclick=()=>{
+  D.titolo=base.titolo;D.passi.forEach((p,i)=>{p.testo=base.testi[i];});
+  render();aggiorna();
+};
+window.addEventListener('beforeunload',e=>{if(modifiche()>0){e.preventDefault();e.returnValue='';}});
+
+function nomeCartella(){
+  try{
+    if(location.protocol==='file:'){
+      const p=decodeURIComponent(location.pathname).split('/').filter(Boolean);
+      if(p.length>=2)return p[p.length-2];
+    }
+  }catch(e){}
+  return D.progetto||'progetto';
+}
+async function esiste(dir,nome){
+  try{await dir.getDirectoryHandle(nome);return true;}
+  catch(e){if(e.name==='NotFoundError')return false;if(e.name==='TypeMismatchError')return true;throw e;}
+}
+async function testoDi(dir,nome){return await (await (await dir.getFileHandle(nome)).getFile()).text();}
+async function scrivi(dir,nome,contenuto){
+  const w=await (await dir.getFileHandle(nome,{create:true})).createWritable();
+  await w.write(contenuto);await w.close();
+}
+async function salva(){
+  if(occupato||!modifiche())return;
+  if(!window.showDirectoryPicker){avviso('Per salvare la copia serve Microsoft Edge o Google Chrome.',9000);return;}
+  let radice;
+  try{radice=await window.showDirectoryPicker({id:'registratore-azioni',mode:'readwrite',startIn:'documents'});}
+  catch(e){
+    if(e.name==='AbortError')return;
+    avviso(e.name==='SecurityError'
+      ?'Il browser non permette quella cartella: scegli la cartella dei progetti (non Documenti o Desktop).'
+      :'Non riesco ad aprire la cartella: '+e.message,9000);
+    return;
+  }
+  occupato=true;aggiorna();
+  try{
+    const orig=nomeCartella();
+    let src;
+    try{src=await radice.getDirectoryHandle(orig);}
+    catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'» (di solito Documenti\\Registratore Azioni), non il progetto stesso');}
+    const radiceNome=orig.replace(/_modificato(_\d+)?$/,'')+'_modificato';
+    let nome=radiceNome,k=2;
+    while(await esiste(radice,nome))nome=radiceNome+'_'+(k++);
+    const dest=await radice.getDirectoryHandle(nome,{create:true});
+
+    const sorg=await src.getDirectoryHandle('immagini');
+    const dimm=await dest.getDirectoryHandle('immagini',{create:true});
+    const file=[];
+    for await(const [n,h] of sorg.entries())if(h.kind==='file')file.push([n,h]);
+    let fatti=0;
+    for(const [n,h] of file){
+      avviso('Copio le immagini '+(++fatti)+' / '+file.length+'…');
+      const w=await (await dimm.getFileHandle(n,{create:true})).createWritable();
+      await (await h.getFile()).stream().pipeTo(w);
+    }
+
+    const passi=D.passi.map((p,i)=>{
+      const q=Object.assign({},p);
+      if(p.testo!==base.testi[i]&&!q.testo_originale)q.testo_originale=base.testi[i];
+      return q;
+    });
+    const dati={progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi};
+    await scrivi(dest,'passi.json',JSON.stringify(dati,null,2));
+
+    const LT='<';  /* spezzo le etichette HTML: dentro uno script il browser le leggerebbe come vere */
+    const blocco=LT+'!--DATI-->'+LT+'script id="dati" type="application/json">'+
+      JSON.stringify({progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi}).replace(/</g,'\\u003c')+
+      LT+'/script>'+LT+'!--/DATI-->';
+    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let html=await testoDi(src,'index.html');
+    html=html.replace(new RegExp(LT+'!--DATI-->[\\s\\S]*?'+LT+'!--/DATI-->'),()=>blocco)
+             .replace(/<title>[\s\S]*?<\/title>/,()=>'<title>'+esc(D.titolo)+'</title>');
+    await scrivi(dest,'index.html',html);
+
+    base.titolo=D.titolo;base.testi=D.passi.map(p=>p.testo);
+    D.passi.forEach((p,i)=>{if(passi[i].testo_originale)p.testo_originale=passi[i].testo_originale;});
+    occupato=false;
+    render();
+    avviso('✓ Creata la cartella «'+nome+'». L\'originale non è cambiato.',10000);
+  }catch(e){
+    occupato=false;
+    avviso('Non sono riuscito a salvare: '+e.message,12000);
+  }
+}
+$('#bsal').onclick=salva;
+
 /* ---- lettore immagini ---- */
 function apriLb(i){
   cur=i;const p=D.passi[i];
@@ -782,6 +1015,7 @@ function apriLb(i){
 }
 function chiudiLb(){$('#lb').hidden=true;$('#lbi').src='';document.body.style.overflow='';cur=-1;}
 function vai(d){const n=cur+d;if(n>=0&&n<D.passi.length)apriLb(n);}
+$('#lbo').innerHTML=svg('apri');$('#lbo').firstChild.style.cssText='width:20px;height:20px';
 $('#lbx').onclick=chiudiLb;
 $('#lbp').onclick=()=>vai(-1);
 $('#lbn').onclick=()=>vai(1);
@@ -792,7 +1026,6 @@ document.addEventListener('keydown',e=>{
     if(e.key==='Escape')chiudiLb();
     else if(e.key==='ArrowRight')vai(1);
     else if(e.key==='ArrowLeft')vai(-1);
-    return;
   }
 });
 
@@ -804,7 +1037,8 @@ render();
 
 
 def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato: str) -> Path:
-    dati = {"titolo": titolo, "creato": creato, "modalita": nome_modo, "passi": steps}
+    dati = {"progetto": Path(cartella).name, "titolo": titolo, "creato": creato,
+            "modalita": nome_modo, "passi": steps}
     json_dati = json.dumps(dati, ensure_ascii=False).replace("<", "\\u003c")
     blocco = f'<!--DATI--><script id="dati" type="application/json">{json_dati}</script><!--/DATI-->'
     logo = logo_base64()
@@ -812,23 +1046,20 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
     img_logo = f'<img class="logo" alt="" src="data:image/png;base64,{logo}">' if logo else ""
     tema = TEMA_HTML if TEMA_HTML in ("scuro", "chiaro") else "scuro"
     colori_css = "\n".join(
-        f".passo[data-az={k}],.lg[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
+        f".passo[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
         for k, (_nome, (r, g, b)) in AZIONI.items())
-    nomi_az = json.dumps({k: nome for k, (nome, _c) in AZIONI.items()}, ensure_ascii=False)
     pagina = (HTML_TEMPLATE
               .replace("__TEMA__", tema)
               .replace("__TITOLO__", html.escape(titolo))
               .replace("__FAVICON__", favicon)
               .replace("__LOGO__", img_logo)
               .replace("__COLORI_CSS__", colori_css)
-              .replace("__NOMI_AZ__", nomi_az)
               .replace("__DATI__", blocco))
-    out = cartella / "index.html"
-    tmp = cartella / "index.html.tmp"
+    out = Path(cartella) / "index.html"
+    tmp = Path(cartella) / "index.html.tmp"
     tmp.write_text(pagina, encoding="utf-8")
     os.replace(tmp, out)
     return out
-
 
 
 # --------------------------------------------------------------------------
@@ -838,11 +1069,11 @@ GUIDA = f"""COME SI USA
 1. Scrivi il nome del progetto e premi «Avvia registrazione». I progetti vengono salvati nella cartella indicata in Impostazioni (la puoi cambiare quando vuoi).
 2. Lavora normalmente. A ogni clic, trascinamento o azione da tastiera viene salvato uno screenshot con un riquadro colorato. La rotellina del mouse non conta.
 3. Quando scrivi, il testo viene raggruppato: un passo per riga (per esempio «show ip route» + Invio), non uno per lettera.
-4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i pulsanti «Pausa» e «Fine» della barra in alto a destra.
-5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri. Anche chiudere la barra con la X porta a questa schermata.
+4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i due pulsanti rotondi della barretta in alto a destra (pausa e fine); si sposta trascinandola. Il pallino è rosso mentre registri, arancione in pausa.
+5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri. Anche chiudere la barretta (Alt+F4) porta a questa schermata.
 
 I COLORI DEI RIQUADRI
-Ogni tipo di azione ha il suo colore, uguale negli screenshot e nella pagina HTML:
+Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo nella pagina HTML):
 • Rosso = clic sinistro
 • Blu = clic destro
 • Verde = clic centrale
@@ -858,11 +1089,11 @@ IMPOSTAZIONI
 Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML) e se nascondere la barra del registratore dagli screenshot.
 
 MODIFICARE UN PROGETTO
-Dalla schermata iniziale, «Modifica un progetto»: scegli il progetto dalla lista, cambia il titolo e le descrizioni dei passi (ogni passo ha la sua miniatura) e premi «Salva come nuova cartella». Il programma crea «nomeprogetto_modificato» accanto all'originale, con immagini, pagina HTML e dati; l'originale non viene toccato.
+Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (di solito Documenti\\Registratore Azioni) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
 
 LA PAGINA HTML
-• Clic su un'immagine: si apre nel lettore (frecce ← → per scorrere, Esc per chiudere, clic per ingrandire). La freccetta ↗ in alto a destra la apre da sola in una nuova scheda.
-• «PDF» stampa la pagina per salvarla in PDF. «Tema» passa da scuro a chiaro.
+• Clic su un'immagine: si apre nel lettore (frecce ← → per scorrere, Esc per chiudere, clic per ingrandire). La freccetta in alto a destra la apre da sola in una nuova scheda.
+• L'icona della stampante salva la pagina in PDF; sole/luna cambia tema.
 
 COSA VIENE CREATO
 Nella cartella del progetto: index.html (la pagina), passi.json (i dati) e immagini/ (gli screenshot). Una copia modificata contiene le stesse cose; in passi.json le descrizioni cambiate conservano anche il testo originale. Non viene mai sovrascritto nulla: se un nome esiste già, il programma aggiunge _2, _3…
@@ -871,7 +1102,7 @@ COSE DA SAPERE
 • Tutto quello che scrivi e vedi finisce nel progetto, password comprese: metti in pausa quando entri in account personali.
 • Un programma aperto come amministratore potrebbe non essere registrato.
 • Viene catturato solo il monitor dove si trova il mouse.
-• La barra del registratore viene nascosta dagli screenshot (su Windows 10 recente o Windows 11). Si può disattivare in Impostazioni.
+• La barretta del registratore viene nascosta dagli screenshot; se Windows non lo permette, il programma la copre con un riquadro scuro. Si può disattivare in Impostazioni.
 
 OPEN SOURCE E SEGNALAZIONI
 Registratore Azioni {VERSION} è open source e mi fa piacere che giri: più persone lo provano, più errori si trovano. Se qualcosa non funziona o hai un'idea per migliorarlo, scrivimi a {EMAIL}.
@@ -1057,7 +1288,8 @@ FONT_SB = ("Segoe UI Semibold", 9)
 
 class App:
     """Tutto in una sola finestra: cambia solo il contenuto (nessun popup di Windows,
-    a parte la scelta della cartella dei progetti)."""
+    a parte la scelta della cartella dei progetti). Durante la registrazione la finestra
+    diventa una barretta senza cornice, piccola e trascinabile."""
 
     def __init__(self):
         global TEMA_HTML
@@ -1091,8 +1323,11 @@ class App:
         self.base = None
         self._refs = []
         self._widgets = []
-        self._after_pulsa = None
-        self._fase = False
+        self._senza_bordo = False
+        self._righe_msg = 1
+        self._hover = False
+        self._ico_stato = None
+        self._tick = 0
         try:
             self.icon_img = ImageTk.PhotoImage(icona_pil(64))
             self.root.iconphoto(True, self.icon_img)
@@ -1108,15 +1343,26 @@ class App:
     def _px(self, v) -> int:
         return int(round(v * self.k))
 
-    def _scena(self, nome, w, h, pos=None):
+    def _modo_finestra(self, senza_bordo: bool):
+        """Passa dalla finestra normale alla barretta senza cornice (e viceversa)."""
+        if senza_bordo == self._senza_bordo:
+            return
+        r = self.root
+        try:
+            r.withdraw()
+            r.overrideredirect(senza_bordo)
+            r.update_idletasks()
+            r.deiconify()
+            if not senza_bordo:
+                r.focus_force()
+        except tk.TclError:
+            pass
+        self._senza_bordo = senza_bordo
+
+    def _scena(self, nome, w, h, pos=None, senza_bordo=False):
         """Svuota la finestra e prepara lo sfondo nuovo di w x h."""
         self.scena = nome
-        if self._after_pulsa:
-            try:
-                self.root.after_cancel(self._after_pulsa)
-            except Exception:
-                pass
-            self._after_pulsa = None
+        self._hover = False
         for wd in self._widgets:
             try:
                 wd.destroy()
@@ -1131,10 +1377,18 @@ class App:
             pass
         self.cv.delete("all")
         W, H = self._px(w), self._px(h)
-        self.cv.config(width=W, height=H)
+        self.cv.config(width=W, height=H, bg=self.c["grad"][0], cursor="")
         self.base = img_sfondo(W, H, self.c)
         self.w, self.h = w, h
+        self._modo_finestra(senza_bordo)
         self._posiziona(W, H, pos)
+        self.root.update_idletasks()
+        hw = hwnd_finestra(self.root)
+        if senza_bordo:
+            arrotonda_finestra(hw, W, H, H)
+        else:
+            togli_arrotondamento(hw)
+            colora_titolo(hw, _rgb(self.c["grad"][0]), _rgb(self.c["fg"]), self.tema == "scuro")
 
     def _posiziona(self, W, H, pos):
         r = self.root
@@ -1153,19 +1407,14 @@ class App:
         rr_su(self.base, (self._px(x0), self._px(y0), self._px(x1), self._px(y1)),
               self._px(r), fill, outline, 1)
 
-    def _card(self, x0=16, y0=16, x1=None, y1=None):
-        c = self.c
-        self._rr(x0, y0, x1 if x1 is not None else self.w - 16, y1 if y1 is not None else self.h - 16,
-                 20, c["card"], c["card_bordo"])
-
     def _campo_bg(self, x, y, w, h):
         c = self.c
         self._rr(x, y, x + w, y + h, 12, _rgb(c["campo"]) + (255,), c["campo_bordo"])
 
-    def _sfondo_pronto(self):
+    def _sfondo_pronto(self, tag=None):
         foto = self._ImageTk.PhotoImage(self.base)
         self._refs.append(foto)
-        self.cv.create_image(0, 0, image=foto, anchor="nw")
+        self.cv.create_image(0, 0, image=foto, anchor="nw", tags=(tag,) if tag else ())
 
     def _testo(self, x, y, s, font=FONT, fill=None, anchor="nw", width=None, justify="left"):
         return self.cv.create_text(self._px(x), self._px(y), text=s, font=font, fill=fill or self.c["fg"],
@@ -1252,61 +1501,66 @@ class App:
         return seleziona
 
     def _intestazione(self, titolo, sotto=None):
-        """Logo rotondo + titolo, in alto."""
+        """Logo arrotondato + titolo, in alto."""
         logo = self._foto(icona_pil(self._px(40)))
-        self.cv.create_image(self._px(34), self._px(30), image=logo, anchor="nw")
-        self._testo(84, 41 if sotto else 50, titolo, FONT_T, anchor="w")
+        self.cv.create_image(self._px(34), self._px(26), image=logo, anchor="nw")
+        self._testo(84, 37 if sotto else 46, titolo, FONT_T, anchor="w")
         if sotto:
-            self._testo(84, 62, sotto, FONT_S, self.c["mut"], anchor="w")
+            self._testo(84, 58, sotto, FONT_S, self.c["mut"], anchor="w")
 
     def _msg(self, testo, ok=True):
         """Messaggio nella finestra (al posto dei popup)."""
-        if getattr(self, "t_msg", None) and self.scena in ("avvio", "progetti", "modifica"):
+        if self.scena == "avvio":
+            servono = max(1, -(-len(testo) // 50))
+            if servono > self._righe_msg:  # il messaggio non ci sta: ricostruisco la schermata piu' alta
+                self._scena_avvio(msg=testo, ok=ok)
+                return
+        if getattr(self, "t_msg", None) and self.scena in ("avvio", "progetti"):
             self.cv.itemconfig(self.t_msg, text=testo, fill=self.c["ok"] if ok else self.c["err"])
 
     # ---- schermata iniziale ----
     def _scena_avvio(self, pos=None, msg=None, ok=True):
         c = self.c
-        self._scena("avvio", 380, 486, pos)
+        righe = max(1, -(-len(msg) // 50)) if msg else 1
+        self._righe_msg = righe
+        self._scena("avvio", 380, 446 + 14 * righe, pos)
         self.root.title(APP)
         self.root.attributes("-topmost", False)
-        try:
-            nascondi_da_cattura(int(self.root.frame(), 16), False)  # la finestra normale puo' essere catturata
-        except Exception:
-            pass
+        nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
 
-        self._card()
-        self._campo_bg(34, 118, 312, 42)
+        self._campo_bg(34, 114, 312, 42)
         self._sfondo_pronto()
 
         self._intestazione("Registratore azioni", "Un passo, uno screenshot")
-        self._etichetta(34, 98, "Nome del progetto")
-        e = self._entry(34, 118, 312, 42, self.var_nome)
+        self._etichetta(34, 94, "Nome del progetto")
+        e = self._entry(34, 114, 312, 42, self.var_nome)
         e.focus_set()
 
-        self._etichetta(34, 178, "Qualità degli screenshot")
+        self._etichetta(34, 174, "Qualità degli screenshot")
         corrente = self.cfg["modalita_corrente"]
         self.var_modo = corrente if corrente in self.cfg["modalita"] else "Normale"
-        self.t_desc = self._testo(34, 242, "", FONT_S, c["mut"])
-        self._sel_pill = self._pillole(34, 200, list(self.cfg["modalita"]), self.var_modo, self._sel_modo)
+        self.t_desc = self._testo(34, 236, "", FONT_S, c["mut"])
+        self._sel_pill = self._pillole(34, 196, list(self.cfg["modalita"]), self.var_modo, self._sel_modo)
         self._sel_modo(self.var_modo, salva=False)
 
-        self._bottone(34, 274, 312, 48, "Avvia registrazione", self._avvia, primario=True)
+        self._bottone(34, 264, 312, 48, "Avvia registrazione", self._avvia, primario=True)
         pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
         fine = str(self.cfg.get("tasto_fine", "f9")).upper()
-        self._bottone(34, 332, 312, 34, "Modifica un progetto", self._scena_progetti, font=FONT)
-        self._testo(190, 376, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
+        self._bottone(34, 320, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
+        self._testo(190, 368, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
 
-        self.t_msg = self._testo(34, 398, "", FONT_S, c["ok"], width=312)
-        if msg:
-            self._msg(msg, ok)
-
+        y_msg = 390
+        self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
+        y_linea = y_msg + 14 * righe + 10
+        self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
         x = 34
         for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._scena_guida),
                            ("Segnala un problema", self._segnala)):
-            self._link(x, 452, testo, cmd)
+            self._link(x, y_linea + 12, testo, cmd)
             x += tkfont.Font(font=FONT_S).measure(testo) / self.k + 18
-        self._testo(346, 452, f"v{VERSION}", FONT_S, c["mut"], anchor="ne")
+        self._testo(346, y_linea + 12, f"v{VERSION}", FONT_S, c["mut"], anchor="ne")
+        if msg:
+            self._msg(msg, ok)
         self.root.bind("<Return>", lambda _e: self._avvia())
 
     def _sel_modo(self, nome, salva=True):
@@ -1322,25 +1576,24 @@ class App:
     # ---- impostazioni ----
     def _scena_impostazioni(self):
         c = self.c
-        self._scena("impostazioni", 380, 450)
+        self._scena("impostazioni", 380, 420)
         self.root.title(f"Impostazioni · {APP}")
-        self._card()
         self._sfondo_pronto()
 
-        self._link(34, 36, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._testo(34, 74, "Impostazioni", FONT_T)
+        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._testo(34, 58, "Impostazioni", FONT_T)
 
-        self._etichetta(34, 124, "Cartella dei progetti")
-        self.t_root = self._testo(34, 146, self.cfg.get("cartella_radice", ""), FONT_S, width=312)
-        self._bottone(34, 188, 110, 32, "Cambia…", self._scegli_root, font=FONT)
+        self._etichetta(34, 108, "Cartella dei progetti")
+        self.t_root = self._testo(34, 130, self.cfg.get("cartella_radice", ""), FONT_S, width=312)
+        self._bottone(34, 172, 110, 32, "Cambia…", self._scegli_root, font=FONT)
 
-        self._etichetta(34, 246, "Tema")
-        self._pillole(34, 268, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema, w=96)
+        self._etichetta(34, 230, "Tema")
+        self._pillole(34, 252, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema, w=96)
 
-        self._etichetta(34, 320, "Nascondi la barra negli screenshot")
-        self._pillole(34, 342, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
+        self._etichetta(34, 304, "Nascondi la barra negli screenshot")
+        self._pillole(34, 326, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
                       self._imposta_barra, w=96)
-        self._testo(34, 382, "Funziona su Windows 10 (2004 o successivi) e Windows 11.", FONT_S, c["mut"], width=312)
+        self._testo(34, 366, "Funziona su Windows 10 (2004 o successivi) e Windows 11.", FONT_S, c["mut"], width=312)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
     def _imposta_tema(self, nome):
@@ -1368,21 +1621,20 @@ class App:
     # ---- guida (nella stessa finestra) ----
     def _scena_guida(self):
         c = self.c
-        self._scena("guida", 540, 600)
+        self._scena("guida", 540, 590)
         self.root.title(f"Guida · {APP}")
-        self._card()
-        self._campo_bg(30, 84, 480, 432)
+        self._campo_bg(30, 70, 480, 432)
         self._sfondo_pronto()
 
-        self._link(34, 36, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._testo(506, 36, "Guida", FONT_T, anchor="ne")
+        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._testo(506, 24, "Guida", FONT_T, anchor="ne")
 
         t = tk.Text(self.cv, wrap="word", font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0,
                     padx=14, pady=10, spacing1=2, spacing3=4, highlightthickness=0, insertbackground=c["campo"])
         sb = tk.Scrollbar(self.cv, command=t.yview)
         t.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(34), self._px(88), window=t, anchor="nw", width=self._px(456), height=self._px(424))
-        self.cv.create_window(self._px(490), self._px(88), window=sb, anchor="nw", width=self._px(16), height=self._px(424))
+        self.cv.create_window(self._px(34), self._px(74), window=t, anchor="nw", width=self._px(456), height=self._px(424))
+        self.cv.create_window(self._px(490), self._px(74), window=sb, anchor="nw", width=self._px(16), height=self._px(424))
         self._widgets += [t, sb]
         t.tag_configure("titolo", font=FONT_B, foreground=c["acc1"], spacing1=12)
         for riga in GUIDA.strip().splitlines():
@@ -1391,21 +1643,20 @@ class App:
             else:
                 t.insert("end", riga + "\n")
         t.config(state="disabled")
-        self._bottone(34, 530, 472, 44, "Ho capito", self._scena_avvio, primario=True)
+        self._bottone(34, 520, 472, 44, "Ho capito", self._scena_avvio, primario=True)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
-    # ---- modifica di un progetto: salva una copia «nome_modificato» ----
+    # ---- apri un progetto (la modifica si fa dalla pagina HTML) ----
     def _scena_progetti(self):
         c = self.c
-        self._scena("progetti", 380, 480)
-        self.root.title(f"Modifica un progetto · {APP}")
-        self._card()
-        self._campo_bg(34, 140, 312, 180)
+        self._scena("progetti", 380, 500)
+        self.root.title(f"Apri un progetto · {APP}")
+        self._campo_bg(34, 126, 312, 190)
         self._sfondo_pronto()
 
-        self._link(34, 36, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._testo(34, 70, "Modifica un progetto", FONT_T)
-        self._etichetta(34, 118, "Scegli il progetto (i più recenti in alto)")
+        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._testo(34, 58, "Apri un progetto", FONT_T)
+        self._etichetta(34, 104, "Scegli il progetto (i più recenti in alto)")
 
         self._progetti = elenca_progetti(Path(self.cfg.get("cartella_radice", "")))
         lb = tk.Listbox(self.cv, font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0, highlightthickness=0,
@@ -1413,128 +1664,59 @@ class App:
                         exportselection=False)
         sb = tk.Scrollbar(self.cv, command=lb.yview)
         lb.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(40), self._px(146), window=lb, anchor="nw", width=self._px(280), height=self._px(168))
-        self.cv.create_window(self._px(322), self._px(146), window=sb, anchor="nw", width=self._px(16), height=self._px(168))
+        self.cv.create_window(self._px(40), self._px(132), window=lb, anchor="nw", width=self._px(280), height=self._px(178))
+        self.cv.create_window(self._px(322), self._px(132), window=sb, anchor="nw", width=self._px(16), height=self._px(178))
         self._widgets += [lb, sb]
         for d in self._progetti:
             lb.insert("end", d.name)
         if self._progetti:
             lb.selection_set(0)
-            lb.bind("<Double-Button-1>", lambda _e: self._modifica_selezionato())
+            lb.bind("<Double-Button-1>", lambda _e: self._apri_selezionato())
         else:
-            self._testo(190, 230, "Nessun progetto in questa cartella.\nUsa «Altra cartella…»", FONT_S,
+            self._testo(190, 220, "Nessun progetto in questa cartella.\nUsa «Altra cartella…»", FONT_S,
                         c["mut"], anchor="center", justify="center")
         self.lb = lb
-        self._bottone(34, 330, 140, 32, "Altra cartella…", self._altra_cartella, font=FONT)
-        self._bottone(34, 374, 312, 44, "Modifica", self._modifica_selezionato, primario=True)
-        self.t_msg = self._testo(34, 428, "", FONT_S, c["err"], width=312)
-        self.root.bind("<Return>", lambda _e: self._modifica_selezionato())
+        self._bottone(34, 328, 140, 32, "Altra cartella…", self._altra_cartella, font=FONT)
+        self._bottone(34, 372, 312, 44, "Apri", self._apri_selezionato, primario=True)
+        self._testo(34, 428, "Nella pagina clicca sul titolo o su una descrizione per modificarla: "
+                             "la copia si salva come «nome_modificato».", FONT_S, c["mut"], width=312)
+        self.t_msg = self._testo(34, 468, "", FONT_S, c["err"], width=312)
+        self.root.bind("<Return>", lambda _e: self._apri_selezionato())
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
     def _altra_cartella(self):
-        d = filedialog.askdirectory(title="Scegli la cartella del progetto da modificare", parent=self.root,
+        d = filedialog.askdirectory(title="Scegli la cartella del progetto", parent=self.root,
                                     mustexist=True, initialdir=self.cfg.get("cartella_radice") or str(Path.home()))
         if not d:
             return
         d = Path(d)
         if (d / "passi.json").is_file():
-            self._scena_modifica(d)
+            self._apri_progetto(d)
         else:
             self._msg("In quella cartella non c'è un passi.json: scegli la cartella del progetto.", ok=False)
 
-    def _modifica_selezionato(self):
+    def _apri_selezionato(self):
         if self.scena != "progetti":
             return
         sel = self.lb.curselection()
         if not sel:
             self._msg("Scegli un progetto dalla lista.", ok=False)
             return
-        self._scena_modifica(self._progetti[int(sel[0])])
+        self._apri_progetto(self._progetti[int(sel[0])])
 
-    def _scena_modifica(self, src):
-        c = self.c
-        try:
-            dati = json.loads((Path(src) / "passi.json").read_text(encoding="utf-8"))
-            passi = dati.get("passi", [])
-        except Exception as e:
-            self._msg(f"Non riesco a leggere il progetto: {e}", ok=False)
-            return
-        self._src = Path(src)
-        base = re.sub(r"_modificato(_\d+)?$", "", self._src.name)
-        self._scena("modifica", 600, 664)
-        self.root.title(f"Modifica · {self._src.name}")
-        self._card()
-        self._campo_bg(34, 126, 532, 38)
-        self._campo_bg(34, 176, 532, 376)
-        self._sfondo_pronto()
-
-        self._link(34, 36, "‹  Annulla", self._scena_avvio, font=FONT)
-        self._testo(34, 70, f"Modifica «{self._src.name}»", FONT_T)
-        self._etichetta(34, 106, "Titolo della pagina")
-        self.var_titolo = tk.StringVar(master=self.root, value=dati.get("titolo") or self._src.name)
-        self._entry(34, 126, 532, 38, self.var_titolo)
-
-        sc = tk.Canvas(self.cv, bg=c["campo"], highlightthickness=0, bd=0)
-        sb = tk.Scrollbar(self.cv, command=sc.yview)
-        sc.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(40), self._px(182), window=sc, anchor="nw", width=self._px(504), height=self._px(364))
-        self.cv.create_window(self._px(546), self._px(182), window=sb, anchor="nw", width=self._px(16), height=self._px(364))
-        fr = tk.Frame(sc, bg=c["campo"])
-        sc.create_window(0, 0, window=fr, anchor="nw", width=self._px(500))
-        fr.bind("<Configure>", lambda _e: sc.configure(scrollregion=sc.bbox("all")))
-        self._widgets += [sc, sb]
-        self._miniature, self._vars_testi = [], []
-        for i, p in enumerate(passi):
-            riga = tk.Frame(fr, bg=c["campo"])
-            riga.pack(fill="x", pady=(0, 8))
-            thumb = None
-            try:
-                with Image.open(self._src / p.get("img", "")) as im:
-                    im.draft("RGB", (320, 180))
-                    im = im.convert("RGB")
-                    im.thumbnail((self._px(104), self._px(60)), Image.Resampling.LANCZOS)
-                    thumb = self._ImageTk.PhotoImage(im)
-                self._miniature.append(thumb)
-            except Exception:
-                pass
-            if thumb is None:  # miniatura mancante: riquadro vuoto (cosi' la larghezza resta in pixel)
-                thumb = self._ImageTk.PhotoImage(Image.new("RGB", (self._px(104), self._px(60)), c["card_campo"]))
-                self._miniature.append(thumb)
-            lab = tk.Label(riga, image=thumb, bg=c["campo"], width=self._px(104), height=self._px(60))
-            lab.pack(side="left", padx=(0, 10))
-            col = tk.Frame(riga, bg=c["campo"])
-            col.pack(side="left", fill="x", expand=True)
-            tk.Label(col, text=f"{int(p.get('n', i + 1)):02d}  ·  {p.get('ora', '')}", font=FONT_S, bg=c["campo"],
-                     fg=c["mut"], anchor="w").pack(fill="x")
-            v = tk.StringVar(master=self.root, value=p.get("testo", ""))
-            tk.Entry(col, textvariable=v, font=FONT, bg=c["card_campo"], fg=c["fg"], insertbackground=c["fg"],
-                     relief="flat", bd=0, highlightthickness=1, highlightbackground=c["linea"],
-                     highlightcolor=c["acc1"]).pack(fill="x", ipady=5)
-            self._vars_testi.append(v)
-        if not passi:
-            tk.Label(fr, text="Questo progetto non ha passi.", font=FONT, bg=c["campo"], fg=c["mut"]).pack(pady=20)
-        self.root.bind_all("<MouseWheel>", lambda e: sc.yview_scroll(int(-e.delta / 120), "units"))
-
-        self._testo(34, 558, f"Si crea «{base}_modificato» accanto all'originale, che non cambia.",
-                    FONT_S, c["mut"], width=532)
-        self._bottone(34, 600, 340, 44, "Salva come nuova cartella", self._salva_modifica, primario=True)
-        self._bottone(386, 600, 180, 44, "Annulla", self._scena_avvio)
-        self.t_msg = self._testo(34, 576, "", FONT_S, c["err"], width=532)
-
-    def _salva_modifica(self):
-        if self.scena != "modifica":
-            return
-        try:
-            dest = crea_copia_modificata(self._src, self.var_titolo.get(), [v.get() for v in self._vars_testi])
-        except Exception as e:
-            _log.exception("Errore nel salvare la copia modificata")
-            self._msg(f"Non sono riuscito a salvare: {e}", ok=False)
-            return
-        try:
-            os.startfile(dest / "index.html")
+    def _apri_progetto(self, d: Path):
+        try:  # rigenero la pagina cosi' i progetti vecchi hanno l'aspetto e le funzioni nuove
+            dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
+            genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
+                        dati.get("modalita", ""), dati.get("creato", ""))
         except Exception:
-            pass
-        self._scena_avvio(msg=f"✓ Creata la cartella «{dest.name}» con le modifiche. L'originale non è cambiato.")
+            _log.exception("Errore nel preparare la pagina del progetto")
+        try:
+            os.startfile(d / "index.html")
+        except Exception as e:
+            self._msg(f"Non riesco ad aprire la pagina: {e}", ok=False)
+            return
+        self._scena_avvio(msg=f"Aperto «{d.name}». Clicca sul titolo o su una descrizione per modificarla.")
 
     # ---- avvio registrazione ----
     def _avvia(self):
@@ -1565,65 +1747,120 @@ class App:
         self._scena_registrazione(prima_volta=True)
         self._poll()
 
-    # ---- barra di registrazione ----
+    # ---- barra di registrazione: piccola, senza cornice, sempre in primo piano ----
+    def _cerchio(self, cx, cy, d, tag, cmd, hint):
+        c = self.c
+        D_ = self._px(d)
+        n = self._foto(_capa_rr(D_, D_, D_ // 2, c["vetro"], c["vetro_bordo"]))
+        o = self._foto(_capa_rr(D_, D_, D_ // 2, c["vetro_hover"], c["vetro_bordo"]))
+        it = self.cv.create_image(self._px(cx), self._px(cy), image=n, anchor="center", tags=(tag,))
+
+        def entra(_e):
+            self._hover = True
+            self.cv.itemconfig(it, image=o)
+            self.cv.config(cursor="hand2")
+            self.cv.itemconfig(self.t_passi, text=hint(), fill=self.c["fg"])
+
+        def esce(_e):
+            self._hover = False
+            self.cv.itemconfig(it, image=n)
+            self.cv.config(cursor="")
+            self._aggiorna_rec()
+
+        self._mani((tag,), entra=entra, esce=esce, click=lambda _e: cmd())
+        return it
+
+    def _icone_barra(self):
+        """Disegna l'icona del pulsante pausa (cambia tra pausa e riprendi)."""
+        c = self.c
+        self.cv.delete("ico_btn_p")
+        cx, cy = 130, 20
+        tags = ("btn_p", "ico_btn_p")
+        if self.rec and self.rec.paused:
+            pts = [cx - 4, cy - 7, cx - 4, cy + 7, cx + 7, cy]
+            self.cv.create_polygon(*[self._px(v) for v in pts], fill=c["pausa"], outline="", tags=tags)
+        else:
+            for dx in (-5, 2):
+                self.cv.create_rectangle(self._px(cx + dx), self._px(cy - 6), self._px(cx + dx + 3), self._px(cy + 6),
+                                         fill=c["fg"], width=0, tags=tags)
+
     def _scena_registrazione(self, prima_volta=False):
         c = self.c
-        self._scena("rec", 392, 58, "alto_dx")
-        self._rr(1, 1, self.w - 1, self.h - 1, 14, None, c["card_bordo"])
-        self._sfondo_pronto()
-        self.dot = self.cv.create_oval(self._px(16), self._px(21), self._px(32), self._px(37), width=0)
-        self.t_stato = self._testo(42, 29, "", FONT_B, anchor="w")
-        self.t_passi = self._testo(150, 29, "", FONT_S, c["mut"], anchor="w")
-        _it, self.t_pausa = self._bottone(222, 12, 90, 34, "Pausa", self._toggle_pausa, font=FONT)
-        self._bottone(320, 12, 62, 34, "Fine", self._ferma_e_chiedi, primario=True)
+        self._scena("rec", 190, 40, "alto_dx", senza_bordo=True)
+        W, H = self._px(self.w), self._px(self.h)
+        barra = (22, 31, 45) if self.tema == "scuro" else (241, 244, 250)
+        self.base = Image.new("RGBA", (W, H), barra + (255,))
+        self._rr(0, 0, self.w, self.h, 20, None, c["vetro_bordo"])
+        self._sfondo_pronto("drag")
+        # il pallino resta fisso: rosso = registro, arancione = in pausa
+        self.dot = self.cv.create_oval(self._px(14), self._px(14), self._px(26), self._px(26), width=0, tags=("drag",))
+        self.t_passi = self._testo(36, 20, "", FONT_SB, anchor="w")
+        self.cv.addtag_withtag("drag", self.t_passi)
+        self._cerchio(130, 20, 28, "btn_p", self._toggle_pausa,
+                      lambda: ("Riprendi" if self.rec and self.rec.paused else "Pausa")
+                      + f" · {str(self.cfg.get('tasto_pausa', 'f10')).upper()}")
+        self._cerchio(164, 20, 28, "btn_f", self._ferma_e_chiedi,
+                      lambda: f"Fine · {str(self.cfg.get('tasto_fine', 'f9')).upper()}")
+        self.cv.create_rectangle(self._px(159), self._px(15), self._px(169), self._px(25),
+                                 fill=c["rec"], width=0, tags=("btn_f",))
+        self.cv.tag_bind("drag", "<Button-1>", self._drag_inizio)
+        self.cv.tag_bind("drag", "<B1-Motion>", self._drag_muovi)
+        self._ico_stato = None
         self.root.attributes("-topmost", True)
         self.root.update_idletasks()
         self._aggiorna_rec()
+        self._aggiorna_own_rect()
         self.barra_nascosta = None
+        self.rec.maschera_barra = False
         if self.cfg.get("nascondi_barra", True):
-            try:
-                self.barra_nascosta = nascondi_da_cattura(int(self.root.frame(), 16), True)
-            except Exception:
-                self.barra_nascosta = False
+            hw = hwnd_finestra(self.root)
+            nascondi_da_cattura(hw, True)
+            self.barra_nascosta = nascosta_da_cattura(hw)
+            # se Windows non la nasconde davvero, la copro io negli screenshot
+            self.rec.maschera_barra = not self.barra_nascosta
             if prima_volta:
                 _log.info("Barra nascosta dagli screenshot: %s", self.barra_nascosta)
-        self._after_pulsa = self.root.after(550, self._pulsa)
+
+    def _drag_inizio(self, e):
+        self._dx, self._dy = e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y()
+
+    def _drag_muovi(self, e):
+        self.root.geometry(f"+{e.x_root - self._dx}+{e.y_root - self._dy}")
+        self._aggiorna_own_rect()
+
+    def _aggiorna_own_rect(self):
+        if self.rec is None:
+            return
+        try:
+            l, t, r, b = rettangolo_finestra(hwnd_finestra(self.root))
+            self.rec.own_rect = (l - 6, t - 6, r + 6, b + 6)
+        except Exception:
+            pass
 
     def _aggiorna_rec(self):
         if self.scena != "rec" or not self.rec:
             return
         c = self.c
         in_pausa = self.rec.paused
-        self.cv.itemconfig(self.t_stato, text="In pausa" if in_pausa else "Registrando",
-                           fill=c["pausa"] if in_pausa else c["fg"])
-        self.cv.itemconfig(self.t_pausa, text="Riprendi" if in_pausa else "Pausa")
-        col = c["pausa"] if in_pausa else c["rec"]
-        self.cv.itemconfig(self.dot, fill=col)
+        self.cv.itemconfig(self.dot, fill=c["pausa"] if in_pausa else c["rec"])
+        if not self._hover:
+            n = len(self.rec.steps)
+            testo = "1 passo" if n == 1 else f"{n} passi"
+            self.cv.itemconfig(self.t_passi, text=f"In pausa · {n}" if in_pausa else testo,
+                               fill=c["pausa"] if in_pausa else c["fg"])
+        if in_pausa != self._ico_stato:
+            self._ico_stato = in_pausa
+            self._icone_barra()
         self.root.title(f"{'Pausa' if in_pausa else 'REC'} · {self.rec.dir.name}")
-        n = len(self.rec.steps)
-        self.cv.itemconfig(self.t_passi, text=f"{n} passo" if n == 1 else f"{n} passi")
-
-    def _pulsa(self):
-        if self.scena != "rec" or not self.rec:
-            return
-        c = self.c
-        if self.rec.paused:
-            col = c["pausa"]
-        else:
-            self._fase = not self._fase
-            col = c["rec"] if self._fase else _hex(_mix(_rgb(c["rec"]), _rgb(c["grad"][0]), .6))
-        self.cv.itemconfig(self.dot, fill=col)
-        self._after_pulsa = self.root.after(550, self._pulsa)
 
     def _poll(self):
         if self.rec is None or self.in_chiusura:
             return
+        self._tick += 1
         if self.scena == "rec":
-            try:
-                l, t, r, b = rettangolo_finestra(int(self.root.frame(), 16))
-                self.rec.own_rect = (l - 6, t - 6, r + 6, b + 6)
-            except Exception:
-                pass
+            self._aggiorna_own_rect()
+            if self.cfg.get("nascondi_barra", True) and self._tick % 8 == 0:
+                nascondi_da_cattura(hwnd_finestra(self.root), True)  # lo ribadisco, per sicurezza
         while True:
             try:
                 ev = self.rec.ui_events.get_nowait()
@@ -1648,7 +1885,8 @@ class App:
     def _ferma_e_chiedi(self):
         if not self.rec or self.in_chiusura or self.scena != "rec":
             return
-        self.cv.itemconfig(self.t_stato, text="Salvo i passi…")
+        self._hover = True
+        self.cv.itemconfig(self.t_passi, text="Salvo…", fill=self.c["fg"])
         self.root.update_idletasks()
         self.rec.sospendi()
         self._scena_fine()
@@ -1656,22 +1894,21 @@ class App:
     def _scena_fine(self):
         c = self.c
         n = len(self.rec.steps)
-        self._scena("fine", 380, 360, "centro")
+        self._scena("fine", 380, 330, "centro")
         self.root.title(f"Registrazione ferma · {APP}")
         self.root.attributes("-topmost", False)
-        self._card()
-        self._campo_bg(34, 138, 312, 42)
+        self._campo_bg(34, 114, 312, 42)
         self._sfondo_pronto()
 
         self._intestazione("Registrazione ferma", f"{n} passo salvato" if n == 1 else f"{n} passi registrati")
-        self._etichetta(34, 118, "Nome del progetto (puoi cambiarlo)")
+        self._etichetta(34, 94, "Nome del progetto (puoi cambiarlo)")
         self.var_fine.set(self.rec.dir.name)
-        e = self._entry(34, 138, 312, 42, self.var_fine)
+        e = self._entry(34, 114, 312, 42, self.var_fine)
         e.focus_set()
         e.select_range(0, "end")
-        self._bottone(34, 200, 312, 48, "Salva e apri", self._salva, primario=True)
-        self._bottone(34, 258, 312, 40, "Riprendi registrazione", self._riprendi)
-        self._testo(190, 312, "Invio salva  ·  Esc riprende", FONT_S, c["mut"], anchor="n")
+        self._bottone(34, 178, 312, 48, "Salva e apri", self._salva, primario=True)
+        self._bottone(34, 236, 312, 40, "Riprendi registrazione", self._riprendi)
+        self._testo(190, 288, "Invio salva  ·  Esc riprende", FONT_S, c["mut"], anchor="n")
         self.root.bind("<Return>", lambda _e: self._salva())
         self.root.bind("<Escape>", lambda _e: self._riprendi())
 
@@ -1746,7 +1983,7 @@ class App:
     def _chiudi(self):
         if self.rec is not None and not self.in_chiusura:
             if self.scena == "rec":
-                self._ferma_e_chiedi()  # la X non butta via niente: porta alla schermata di fine
+                self._ferma_e_chiedi()  # la chiusura non butta via niente: porta alla schermata di fine
                 return
             if self.scena == "fine":
                 self._salva(chiudi=True)
