@@ -24,7 +24,7 @@ jobs:
         run: |
           $opts = @("--onefile", "--windowed", "--name", "RegistratoreAzioni", "--collect-submodules", "pynput")
           if (Test-Path icon.png) {
-            python -c "from PIL import Image; im = Image.open('icon.png').convert('RGBA'); im.save('icon.ico', format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+            python crea_icona.py icon.png icon.ico
             $opts += @("--icon", "icon.ico", "--add-data", "icon.png;.")
           }
           pyinstaller @opts registratore.py
