@@ -27,6 +27,8 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 2. Avvialo. Se Windows mostra SmartScreen: *Ulteriori informazioni → Esegui comunque* (finché l'exe non è firmato).
 
 Politica di firma: vedi [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
+   Free code signing provided by [SignPath.io](https://signpath.io), 
+   certificate by [SignPath Foundation](https://signpath.org).
 
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
