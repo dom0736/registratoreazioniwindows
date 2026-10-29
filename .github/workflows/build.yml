@@ -3,7 +3,11 @@ name: Build exe
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -30,6 +34,26 @@ jobs:
           pyinstaller @opts registratore.py
 
       - uses: actions/upload-artifact@v4
+        id: upload
         with:
           name: RegistratoreAzioni
           path: dist/RegistratoreAzioni.exe
+
+      # --- FIRMA (da attivare quando SignPath approva il progetto) ---
+      # Togli i # e usa i valori esatti che ti da' SignPath.
+      # - uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+      #     organization-id: "INCOLLA-ORGANIZATION-ID"
+      #     project-slug: "registratoreazioniwindows"
+      #     signing-policy-slug: "release-signing"
+      #     github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      #     wait-for-completion: true
+      #     output-artifact-directory: dist-firmato
+      # Se firmi, nella release qui sotto cambia il percorso in dist-firmato/RegistratoreAzioni.exe
+
+      - name: Pubblica nelle Releases (solo con un tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RegistratoreAzioni.exe
