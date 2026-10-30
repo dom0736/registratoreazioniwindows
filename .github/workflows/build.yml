@@ -26,7 +26,7 @@ jobs:
       - name: Crea l'exe (con icona se c'e' icon.png)
         shell: pwsh
         run: |
-          $opts = @("--onefile", "--windowed", "--name", "RegistratoreAzioni", "--collect-submodules", "pynput")
+          $opts = @("--onefile", "--windowed", "--name", "RegistratoreAzioni", "--collect-submodules", "pynput", "--add-data", "marchio_registratore.txt;.")
           if (Test-Path icon.png) {
             python crea_icona.py icon.png icon.ico
             $opts += @("--icon", "icon.ico", "--add-data", "icon.png;.")
