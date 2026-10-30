@@ -40,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.5"
+VERSION = "1.6"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -139,10 +139,71 @@ def unique_path(p: Path) -> Path:
         i += 1
 
 
-def scrivi_json_atomico(path: Path, data) -> None:
+def scrivi_testo_atomico(path: Path, testo: str) -> None:
+    """Scrive in un file temporaneo e poi lo sostituisce; se qualcosa va storto il temporaneo non resta."""
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        tmp.write_text(testo, encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def scrivi_json_atomico(path: Path, data) -> None:
+    scrivi_testo_atomico(path, json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ---- pulizia: niente resti che si accumulano nel tempo ----
+MARCHIO = "marchio_registratore.txt"   # file incluso nell'exe: riconosce le cartelle temporanee di QUESTO programma
+_marchio_aperto = None
+GIORNO = 86400
+
+
+def togli_tmp(cartella: Path) -> None:
+    """Elimina i file .tmp rimasti da una chiusura anomala (solo nella cartella indicata)."""
+    try:
+        for f in Path(cartella).glob("*.tmp"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def pulisci_temporanei() -> None:
+    """L'exe si scompatta in una cartella _MEIxxxx dentro Temp e la toglie da solo quando si chiude.
+    Se il programma viene chiuso a forza, la cartella resta: qui tolgo quelle vecchie lasciate da questo
+    stesso programma (riconosciute dal marchio), mai quelle di altri programmi né quella in uso."""
+    global _marchio_aperto
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return
+    try:  # tengo il marchio aperto: finché giro, nessun'altra copia può cancellare la mia cartella
+        _marchio_aperto = open(risorsa(MARCHIO), "rb")
+    except OSError:
+        return
+    ora = time.time()
+    try:
+        for d in Path(meipass).parent.glob("_MEI*"):
+            try:
+                if d == Path(meipass) or not d.is_dir() or ora - d.stat().st_mtime < GIORNO:
+                    continue
+                marchio, libero = d / MARCHIO, d / (MARCHIO + ".libero")
+                if marchio.is_file():
+                    os.replace(marchio, libero)  # fallisce se un'altra copia lo sta usando: allora non tocco nulla
+                elif not libero.is_file():
+                    continue  # non è una cartella di questo programma
+                shutil.rmtree(d, ignore_errors=True)
+            except OSError:
+                continue
+    except OSError:
+        pass
+    _log.info("Pulizia temporanei eseguita")
 
 
 def carica_config() -> dict:
@@ -159,6 +220,9 @@ def carica_config() -> dict:
             # Config rovinata: la metto da parte, non la cancello
             try:
                 CONFIG_FILE.rename(unique_path(CONFIG_FILE.with_name("config_rovinata.json")))
+                vecchie = sorted(CONFIG_DIR.glob("config_rovinata*.json"), key=lambda f: f.stat().st_mtime)
+                for f in vecchie[:-3]:  # ne tengo solo 3
+                    f.unlink()
             except OSError:
                 pass
     return cfg
@@ -949,6 +1013,75 @@ figure:hover .op{opacity:1}
   .top,.passo{backdrop-filter:none;box-shadow:none}
   [data-ed]:hover,[data-ed].cambiato{background:none}
 }
+
+/* ---- pannello «Stampa e salva» ---- */
+#stampa{position:fixed;inset:0;z-index:20;display:none;flex-direction:column;background:var(--campo);color:var(--fg)}
+body.sp #stampa{display:flex}
+@media screen{body.sp{overflow:hidden}}
+.sp-testa{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--cb)}
+.sp-testa h2{margin:0;font-size:1.05rem;flex:1}
+.sp-corpo{flex:1;min-height:0;display:flex}
+.sp-lato{width:340px;flex:none;overflow:auto;padding:14px 18px 24px;border-right:1px solid var(--cb)}
+.sp-lato h3{margin:20px 0 8px;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.sp-lato h3:first-child{margin-top:2px}
+.riga{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0;font-size:.85rem}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--vetro);border-radius:999px;padding:2px}
+.seg button{border:0;background:none;color:var(--fg);font:inherit;font-size:.78rem;padding:5px 10px;border-radius:999px;cursor:pointer}
+.seg button.on{background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff}
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:.85rem;cursor:pointer}
+.chk input{accent-color:var(--a1);width:16px;height:16px;margin:0}
+.lp{display:grid;gap:2px;max-height:280px;overflow:auto;margin-top:8px;border:1px solid var(--cb);border-radius:12px;padding:4px}
+.lp label{display:grid;grid-template-columns:auto 52px 1fr;gap:8px;align-items:center;padding:4px 6px;border-radius:8px;cursor:pointer;font-size:.78rem}
+.lp label:hover{background:var(--vetro)}
+.lp img{width:52px;height:32px;object-fit:cover;border-radius:4px;background:var(--vetro)}
+.lp span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-prev{flex:1;min-width:0;display:flex;flex-direction:column}
+.sp-zoom{display:flex;align-items:center;gap:8px;padding:8px 18px;font-size:.8rem;color:var(--mut);border-bottom:1px solid var(--cb)}
+.sp-zoom .bt{padding:4px 12px}
+#zv{min-width:44px;text-align:center}
+#pnv{flex:1;min-height:0;overflow:auto;padding:18px;background:rgba(128,128,128,.2)}
+#fogli{width:max-content;margin:0 auto}
+.sp-piede{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--cb)}
+.sp-piede .info{flex:1;min-width:200px;color:var(--mut);font-size:.8rem}
+.bt:disabled{opacity:.45;cursor:default}
+.foglio,.mis{font:13px/1.45 "Segoe UI",system-ui,sans-serif}
+.foglio{position:relative;overflow:hidden;background:#fff;color:#111;margin:0 auto 16px;box-shadow:0 4px 22px rgba(0,0,0,.4);
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;break-after:page;page-break-after:always}
+.foglio:last-child{break-after:auto;page-break-after:auto}
+html[data-tema=scuro] .foglio.tema{background:#18212e;color:#f4f7fb}
+html[data-tema=chiaro] .foglio.tema{background:#f5f7fb;color:#1b2740}
+.mis{position:fixed;left:-99999px;top:0;visibility:hidden;pointer-events:none}
+.fc,.mis{display:flex;flex-direction:column;gap:14px}
+.fc>*,.mis>*{flex:none}
+.ph{display:flow-root}
+.ph h1{margin:0 0 2px;font-size:20px;line-height:1.25;overflow-wrap:anywhere}
+.ph .sub{color:#666;font-size:11px;margin-bottom:6px}
+.tema .ph .sub,.tema .pm,.tema .prip{color:#9aa9c2}
+.pb{display:flex;flex-direction:column;gap:6px}
+.pbh{display:flex;gap:10px;align-items:flex-start}
+.pn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--az,#3d6fff);color:#fff;display:grid;place-items:center;font:600 11px Consolas,"Cascadia Mono",monospace}
+.pd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}
+.pm{margin:0;color:#666;font-size:11px;overflow-wrap:anywhere}
+.pim img{display:block;max-width:100%;border:1px solid #c9c9c9;border-radius:6px}
+.pb.fx .pim{flex:1;min-height:0;overflow:hidden}
+.pb.fx .pim img{max-height:100%}
+.prip{color:#666;font-size:11px;font-weight:600;border-top:1px solid #c9c9c9;padding-top:6px}
+.pf{position:absolute;display:flex;justify-content:space-between;gap:12px;font-size:10px;color:#777}
+.pft{max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:760px){
+  .sp-corpo{flex-direction:column}
+  .sp-lato{width:auto;max-height:46%;border-right:0;border-bottom:1px solid var(--cb)}
+}
+@media print{
+  body.sp{background:#fff!important;min-height:0}
+  body.sp .wrap,body.sp #sb,body.sp #lb,body.sp .mis{display:none!important}
+  body.sp #stampa{position:static;display:block;background:none}
+  body.sp .sp-testa,body.sp .sp-lato,body.sp .sp-zoom,body.sp .sp-piede{display:none!important}
+  body.sp .sp-corpo,body.sp .sp-prev{display:block}
+  body.sp #pnv{overflow:visible;padding:0;background:none}
+  body.sp #fogli{zoom:1!important;width:auto;margin:0}
+  body.sp .foglio{margin:0;box-shadow:none}
+}
 </style>
 </head>
 <body>
@@ -958,7 +1091,7 @@ __LOGO__
 <div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
 <button class="ib" id="btema" type="button"></button>
-<button class="ib" id="bpdf" type="button" title="Salva in PDF"></button>
+<button class="ib" id="bpdf" type="button" title="Stampa e salva (Ctrl+P)"></button>
 </div>
 </header>
 <p class="hint">Clicca sul titolo o su una descrizione per modificarla: la copia si salva in una nuova cartella «_modificato».</p>
@@ -979,6 +1112,43 @@ __LOGO__
 <img id="lbi" alt="">
 <div id="lbc"></div>
 </div>
+
+<div id="stampa" role="dialog" aria-label="Stampa e salva">
+<style id="pgstyle"></style>
+<div class="sp-testa"><h2>Stampa e salva</h2><button class="bt" id="spx" type="button">Chiudi</button></div>
+<div class="sp-corpo">
+<div class="sp-lato">
+<h3>Passi da includere</h3>
+<div class="riga"><span id="spn"></span><span><button class="bt" id="spt" type="button">Tutti</button> <button class="bt" id="spz" type="button">Nessuno</button></span></div>
+<div class="lp" id="lp"></div>
+<h3>Pagina</h3>
+<div class="riga">Formato<div class="seg" data-k="carta"><button type="button" data-v="a4">A4</button><button type="button" data-v="letter">Letter</button></div></div>
+<div class="riga">Orientamento<div class="seg" data-k="orient"><button type="button" data-v="v">Verticale</button><button type="button" data-v="o">Orizzontale</button></div></div>
+<div class="riga">Margini<div class="seg" data-k="margini"><button type="button" data-v="s">Stretti</button><button type="button" data-v="n">Normali</button><button type="button" data-v="l">Larghi</button></div></div>
+<h3>Disposizione</h3>
+<div class="riga">Passi per pagina<div class="seg" data-k="per"><button type="button" data-v="auto">Auto</button><button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button></div></div>
+<div class="riga" id="rimm">Immagini<div class="seg" data-k="imm"><button type="button" data-v="g">Grande</button><button type="button" data-v="m">Media</button><button type="button" data-v="p">Piccola</button></div></div>
+<h3>Contenuto</h3>
+<label class="chk"><input type="checkbox" data-k="titolo">Titolo e data in alto</label>
+<label class="chk"><input type="checkbox" data-k="descr">Descrizioni dei passi</label>
+<label class="chk"><input type="checkbox" data-k="meta">Ora e finestra</label>
+<label class="chk"><input type="checkbox" data-k="shot">Screenshot</label>
+<label class="chk"><input type="checkbox" data-k="num">Numero di pagina</label>
+<label class="chk"><input type="checkbox" data-k="bianco">Sfondo bianco (risparmia inchiostro)</label>
+</div>
+<div class="sp-prev">
+<div class="sp-zoom">Anteprima
+<button class="bt" id="zm" type="button" title="Riduci">−</button><span id="zv"></span><button class="bt" id="zp" type="button" title="Ingrandisci">+</button><button class="bt" id="za" type="button">Adatta</button></div>
+<div id="pnv"><div id="fogli"></div></div>
+</div>
+</div>
+<div class="sp-piede">
+<span class="info"><span id="spi"></span><br>Per il PDF scegli «Salva come PDF» come stampante nella finestra che si apre.</span>
+<button class="bt" id="spm" type="button" title="Elenco dei passi in testo Markdown (i link alle immagini sono relativi alla cartella del progetto)">Salva elenco (.md)</button>
+<button class="bt p" id="sps" type="button">Stampa / Salva PDF…</button>
+</div>
+</div>
+<div class="mis" id="misura"></div>
 
 __DATI__
 <script>
@@ -1011,7 +1181,7 @@ $('#btema').onclick=()=>{
   iconaTema();
 };
 $('#bpdf').innerHTML=svg('pdf');
-$('#bpdf').onclick=()=>print();
+$('#bpdf').onclick=()=>apriStampa();
 iconaTema();
 
 /* ---- modifica cliccando sul testo ---- */
@@ -1124,6 +1294,7 @@ async function salva(){
     return;
   }
   occupato=true;aggiorna();
+  let creata='';   /* se qualcosa va storto a metà, tolgo la copia incompleta: niente cartelle a metà in giro */
   try{
     const orig=nomeCartella();
     let src;
@@ -1133,6 +1304,7 @@ async function salva(){
     let nome=radiceNome,k=2;
     while(await esiste(radice,nome))nome=radiceNome+'_'+(k++);
     const dest=await radice.getDirectoryHandle(nome,{create:true});
+    creata=nome;
 
     const sorg=await src.getDirectoryHandle('immagini');
     const dimm=await dest.getDirectoryHandle('immagini',{create:true});
@@ -1163,6 +1335,7 @@ async function salva(){
              .replace(/<title>[\s\S]*?<\/title>/,()=>'<title>'+esc(D.titolo)+'</title>');
     await scrivi(dest,'index.html',html);
 
+    creata='';
     base.titolo=D.titolo;base.testi=D.passi.map(p=>p.testo);
     D.passi.forEach((p,i)=>{if(passi[i].testo_originale)p.testo_originale=passi[i].testo_originale;});
     occupato=false;
@@ -1170,6 +1343,7 @@ async function salva(){
     avviso('✓ Creata la cartella «'+nome+'». L\'originale non è cambiato.',10000);
   }catch(e){
     occupato=false;
+    if(creata){try{await radice.removeEntry(creata,{recursive:true});}catch(_){}}
     avviso('Non sono riuscito a salvare: '+e.message,12000);
   }
 }
@@ -1198,6 +1372,184 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+/* ---- stampa e salva: anteprima impaginata, scelta dei passi, opzioni ---- */
+const CARTE={a4:[793,1122],letter:[816,1056]};   /* px a 96 dpi, arrotondati per difetto: niente pagina bianca in più */
+const MARG={s:24,n:48,l:72};
+const S0={carta:'a4',orient:'v',margini:'n',per:'auto',imm:'g',titolo:true,descr:true,meta:true,shot:true,num:true,bianco:true};
+const S=Object.assign({},S0);
+try{const j=JSON.parse(localStorage.getItem('stampa')||'{}');for(const k in S0)if(typeof j[k]===typeof S0[k])S[k]=j[k];}catch(e){}
+const SEL=new Set();
+let selInit=false,zm=null,tok=0,tim=0,quanti=0;
+const indiciReali=()=>D.passi.map((p,i)=>i).filter(i=>D.passi[i].tipo!=='ripresa');
+const salvaS=()=>{try{localStorage.setItem('stampa',JSON.stringify(S));}catch(e){}};
+const aperta=()=>document.body.classList.contains('sp');
+
+function sincro(){
+  document.querySelectorAll('#stampa .seg').forEach(g=>g.querySelectorAll('button').forEach(b=>b.classList.toggle('on',String(S[g.dataset.k])===b.dataset.v)));
+  document.querySelectorAll('#stampa input[data-k]').forEach(c=>{c.checked=!!S[c.dataset.k];});
+  $('#rimm').style.display=S.per==='auto'?'':'none';
+}
+function popolaLista(){
+  const L=$('#lp');L.textContent='';
+  D.passi.forEach((p,i)=>{
+    if(p.tipo==='ripresa')return;
+    const l=document.createElement('label');
+    const c=document.createElement('input');c.type='checkbox';c.checked=SEL.has(i);c.dataset.i=i;
+    c.onchange=()=>{c.checked?SEL.add(i):SEL.delete(i);pianifica();};
+    const im=document.createElement('img');im.loading='lazy';im.src=p.img;im.alt='';
+    const s=document.createElement('span');s.textContent=pad(p.n)+'  '+p.testo;s.title=p.testo;
+    l.append(c,im,s);L.append(l);
+  });
+}
+function scegliTutti(si){
+  SEL.clear();if(si)indiciReali().forEach(i=>SEL.add(i));
+  document.querySelectorAll('#lp input').forEach(c=>{c.checked=si;});
+  pianifica();
+}
+function apriStampa(){
+  if(!selInit){indiciReali().forEach(i=>SEL.add(i));selInit=true;}
+  popolaLista();sincro();
+  document.body.classList.add('sp');
+  zm=null;pianifica(0);
+}
+function chiudiStampa(){document.body.classList.remove('sp');tok++;$('#fogli').textContent='';$('#misura').textContent='';}
+function pianifica(ms){clearTimeout(tim);$('#sps').disabled=true;tim=setTimeout(costruisci,ms===undefined?200:ms);}
+
+function applicaZoom(){
+  const F=$('#fogli'),pg=F.firstElementChild;if(!pg)return;
+  const adatta=Math.min(1,Math.max(.2,($('#pnv').clientWidth-36)/parseFloat(pg.style.width)));
+  const z=zm||adatta;F.style.zoom=z;$('#zv').textContent=Math.round(z*100)+'%';
+}
+function cambiaZoom(f){const F=$('#fogli');zm=Math.min(2.5,Math.max(.2,(parseFloat(F.style.zoom)||1)*f));applicaZoom();}
+
+async function costruisci(){
+  const mio=++tok;
+  let [W,H]=CARTE[S.carta];if(S.orient==='o')[W,H]=[H,W];
+  const m=MARG[S.margini],cw=W-2*m,GAP=14,ch=H-2*m-(S.num?22:0);
+  $('#pgstyle').textContent='@page{size:'+(S.carta==='a4'?'A4':'letter')+(S.orient==='o'?' landscape':'')+';margin:0}';
+
+  /* elementi: un blocco per passo (con la riga «ripresa» in testa, se c'è) */
+  const mis=$('#misura');mis.textContent='';mis.style.width=cw+'px';
+  const fisso=S.per!=='auto';
+  const els=[];let rip=null;
+  D.passi.forEach((p,i)=>{
+    if(p.tipo==='ripresa'){rip=p.testo;return;}
+    if(!SEL.has(i))return;
+    const d=document.createElement('div');d.className='pb';d.dataset.az=az(p);
+    if(rip){const r=document.createElement('div');r.className='prip';r.textContent=rip;d.append(r);rip=null;}
+    const h=document.createElement('div');h.className='pbh';
+    const n=document.createElement('div');n.className='pn';n.textContent=pad(p.n);
+    const t=document.createElement('div');t.style.minWidth='0';
+    if(S.descr){const x=document.createElement('p');x.className='pd';x.textContent=p.testo;t.append(x);}
+    if(S.meta){const x=document.createElement('p');x.className='pm';x.textContent=p.ora+(p.finestra?' · '+p.finestra:'');t.append(x);}
+    h.append(n,t);d.append(h);
+    if(S.shot){
+      const w=document.createElement('div');w.className='pim';
+      const im=document.createElement('img');im.src=p.img;im.alt='';
+      if(!fisso)im.style.width={g:'100%',m:'75%',p:'50%'}[S.imm];
+      w.append(im);d.append(w);
+    }
+    els.push(d);
+  });
+  quanti=els.length;
+  $('#spn').textContent=quanti+' di '+indiciReali().length+' selezionati';
+
+  const head=document.createElement('div');head.className='ph';
+  const h1=document.createElement('h1');h1.textContent=D.titolo;
+  const sub=document.createElement('div');sub.className='sub';
+  let dt=D.creato;try{dt=new Date(D.creato).toLocaleString('it-IT',{dateStyle:'long',timeStyle:'short'});}catch(e){}
+  sub.textContent=reali()+' passi · '+dt;
+  head.append(h1,sub);
+
+  if(S.titolo)mis.append(head);
+  els.forEach(e=>mis.append(e));
+  if(!fisso)await Promise.all([...mis.querySelectorAll('img')].map(i=>i.decode?i.decode().catch(()=>{}):0));
+  if(mio!==tok)return;
+
+  /* impaginazione */
+  const pagine=[];let cur=null,usato=0;
+  const nuova=()=>{cur=[];pagine.push(cur);usato=0;};
+  nuova();
+  if(S.titolo){cur.push(head);usato=head.offsetHeight+GAP;}
+  if(!fisso){
+    els.forEach(e=>{
+      let h=e.offsetHeight;
+      if(h>ch){  /* più alto di una pagina: rimpicciolisco l'immagine */
+        const im=e.querySelector('img');
+        if(im){const extra=h-im.offsetHeight;im.style.width='auto';im.style.maxHeight=Math.max(60,ch-extra-4)+'px';h=e.offsetHeight;}
+      }
+      const vuota=cur.length===0||(cur.length===1&&cur[0]===head);
+      if(!vuota&&usato+h>ch)nuova();
+      cur.push(e);usato+=h+GAP;
+    });
+  }else{
+    const N=+S.per;let k=0,primo=true;
+    while(k<els.length){
+      if(!primo)nuova();
+      const av=ch-(primo&&S.titolo?head.offsetHeight+GAP:0);
+      const sh=Math.max(60,Math.floor((av-GAP*(N-1))/N));
+      for(let j=0;j<N&&k<els.length;j++,k++){els[k].classList.add('fx');els[k].style.height=sh+'px';cur.push(els[k]);}
+      primo=false;
+    }
+  }
+
+  const F=$('#fogli');F.textContent='';
+  if(!quanti&&!S.titolo){F.textContent='';mis.textContent='';$('#spi').textContent='Nessun passo selezionato.';$('#sps').disabled=true;return;}
+  const tot=pagine.length;
+  pagine.forEach((blocchi,pi)=>{
+    const pg=document.createElement('div');pg.className='foglio'+(S.bianco?'':' tema');
+    pg.style.cssText='width:'+W+'px;height:'+H+'px;padding:'+m+'px';
+    const fc=document.createElement('div');fc.className='fc';
+    blocchi.forEach(b=>fc.append(b));pg.append(fc);
+    if(S.num){
+      const f=document.createElement('div');f.className='pf';
+      f.style.cssText='left:'+m+'px;right:'+m+'px;bottom:'+Math.max(8,Math.round(m/2.5))+'px';
+      const a=document.createElement('span');a.className='pft';a.textContent=D.titolo;
+      const b=document.createElement('span');b.textContent='Pagina '+(pi+1)+' di '+tot;
+      f.append(a,b);pg.append(f);
+    }
+    F.append(pg);
+  });
+  mis.textContent='';
+  applicaZoom();
+  $('#spi').textContent=quanti+(quanti===1?' passo':' passi')+' · '+tot+(tot===1?' pagina':' pagine');
+  $('#sps').disabled=!quanti;
+}
+
+function esportaMd(){
+  const r=['# '+D.titolo,''];let rip=null;
+  D.passi.forEach((p,i)=>{
+    if(p.tipo==='ripresa'){rip=p.testo;return;}
+    if(!SEL.has(i))return;
+    if(rip){r.push('_'+rip+'_','');rip=null;}
+    r.push('## '+pad(p.n)+(S.descr?'. '+p.testo.replace(/\s+/g,' '):''));
+    if(S.meta)r.push(p.ora+(p.finestra?' · '+p.finestra:''));
+    if(S.shot)r.push('','![Passo '+p.n+']('+p.img+')');
+    r.push('');
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([r.join('\n')],{type:'text/markdown;charset=utf-8'}));
+  a.download=(D.titolo.replace(/[<>:"\/\\|?*\x00-\x1f]/g,'_').trim()||'progetto')+'.md';
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);   /* niente resti in memoria */
+}
+
+document.querySelectorAll('#stampa .seg button').forEach(b=>b.onclick=()=>{S[b.parentNode.dataset.k]=b.dataset.v;salvaS();sincro();pianifica();});
+document.querySelectorAll('#stampa input[data-k]').forEach(c=>c.onchange=()=>{S[c.dataset.k]=c.checked;salvaS();pianifica();});
+$('#spt').onclick=()=>scegliTutti(true);
+$('#spz').onclick=()=>scegliTutti(false);
+$('#spx').onclick=chiudiStampa;
+$('#sps').onclick=()=>{if(quanti)print();};
+$('#spm').onclick=()=>{if(quanti)esportaMd();};
+$('#zm').onclick=()=>cambiaZoom(1/1.2);
+$('#zp').onclick=()=>cambiaZoom(1.2);
+$('#za').onclick=()=>{zm=null;applicaZoom();};
+window.addEventListener('resize',()=>{if(aperta())applicaZoom();});
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='p'&&!aperta()){e.preventDefault();apriStampa();return;}
+  if(e.key==='Escape'&&aperta()&&cur<0)chiudiStampa();
+});
+
 const _lg=document.querySelector('img.logo'),_fv=document.getElementById('fav');
 if(_lg&&_fv)_fv.href=_lg.src;  /* stessa immagine del logo: niente copia in più nel file */
 render();
@@ -1217,7 +1569,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
     img_logo = f'<img class="logo" alt="" src="data:image/png;base64,{logo}">' if logo else ""
     tema = TEMA_HTML if TEMA_HTML in ("scuro", "chiaro") else "scuro"
     colori_css = "\n".join(
-        f".passo[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
+        f".passo[data-az={k}],.pb[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
         for k, (_nome, (r, g, b)) in AZIONI.items())
     pagina = (HTML_TEMPLATE
               .replace("__TEMA__", tema)
@@ -1227,9 +1579,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
               .replace("__COLORI_CSS__", colori_css)
               .replace("__DATI__", blocco))
     out = Path(cartella) / "index.html"
-    tmp = Path(cartella) / "index.html.tmp"
-    tmp.write_text(pagina, encoding="utf-8")
-    os.replace(tmp, out)
+    scrivi_testo_atomico(out, pagina)
     return out
 
 
@@ -1254,10 +1604,10 @@ Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo ne
 Se subito dopo un clic scorri con la rotellina, il riquadro non viene disegnato: la pagina si è spostata e finirebbe nel punto sbagliato.
 
 QUALITÀ DEGLI SCREENSHOT
-Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json.
+Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json, dove si trovano anche i tasti (tasto_pausa, tasto_fine) e la pausa che chiude un passo di testo (pausa_digitazione_sec).
 
 ANNULLARE UNA REGISTRAZIONE
-Dalla schermata di fine premi «Annulla registrazione»: il programma chiede conferma. Non cancella niente subito: la cartella va in «{CARTELLA_BACKUP}», dentro la cartella dei progetti, e la puoi recuperare riportandola fuori. Se ne tengono al massimo {BACKUP_MASSIMO} (il numero si cambia in Impostazioni): quando sono di più, vengono eliminate le più vecchie. Puoi svuotare la cartella a mano quando vuoi. Se c'è un errore mentre salvi, il programma fa una copia di sicurezza nella stessa cartella.
+Dalla schermata di fine premi «Annulla registrazione»: il programma chiede conferma. Non cancella niente subito: la cartella va in «{CARTELLA_BACKUP}», dentro la cartella dei progetti, e la puoi recuperare riportandola fuori. Se ne tengono al massimo {BACKUP_MASSIMO} di base (il numero si cambia in Impostazioni): quando sono di più, vengono eliminate le più vecchie. Puoi svuotare la cartella a mano quando vuoi. Se c'è un errore mentre salvi, il programma fa una copia di sicurezza nella stessa cartella.
 
 RIPRENDERE UN PROGETTO
 Da «Apri un progetto» scegli il progetto e premi «Riprendi»: la registrazione riparte nella stessa cartella, anche il giorno dopo o a progetto finito, e i nuovi passi si aggiungono in fondo. Nella pagina HTML compare una riga con il giorno e l'ora in cui hai ripreso. Se annulli subito, il progetto resta com'era.
@@ -1270,13 +1620,32 @@ Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su i
 
 LA PAGINA HTML
 • Clic su un'immagine: si apre nel lettore (frecce ← → per scorrere, Esc per chiudere, clic per ingrandire). La freccetta in alto a destra la apre da sola in una nuova scheda.
-• L'icona della stampante salva la pagina in PDF; sole/luna cambia tema.
+• Per modificare: clic sul titolo o su una descrizione, Invio conferma, Esc annulla quel testo; il pulsante «Annulla» in basso scarta tutte le modifiche non salvate.
+• Sole/luna cambia tema (la scelta resta nel browser).
+• L'icona della stampante (o Ctrl+P) apre «Stampa e salva».
+
+STAMPA E SALVA IN PDF
+Si apre un pannello con l'anteprima delle pagine, che si aggiorna a ogni scelta:
+• Passi da includere: togli la spunta a quelli che non vuoi (Tutti / Nessuno).
+• Pagina: A4 o Letter, verticale o orizzontale, margini stretti, normali o larghi.
+• Disposizione: quanti passi per pagina (Auto, 1, 2, 3 o 4) e la dimensione delle immagini.
+• Contenuto: titolo e data, descrizioni, ora e finestra, screenshot, numero di pagina, sfondo bianco (risparmia inchiostro) oppure i colori della pagina.
+• «Stampa / Salva PDF…» apre la finestra di stampa vera e propria: per ottenere un PDF scegli «Salva come PDF» (o «Microsoft Print to PDF») al posto della stampante. Il file PDF prende il nome del titolo.
+• «Salva elenco (.md)» scarica l'elenco dei passi scelti in testo (Markdown); i link alle immagini sono relativi, quindi salvalo dentro la cartella del progetto.
+Le scelte restano memorizzate nel browser. Per PowerPoint o Word: salva prima il PDF e aprilo con il programma che vuoi.
 
 COSA VIENE CREATO
 Nella cartella del progetto: index.html (la pagina), passi.json (i dati) e immagini/ (gli screenshot). Una copia modificata contiene le stesse cose; in passi.json le descrizioni cambiate conservano anche il testo originale. Non viene mai sovrascritto nulla: se un nome esiste già, il programma aggiunge _2, _3…
+In %APPDATA%\\RegistratoreAzioni ci sono solo config.json e log.txt (il log è limitato a poche centinaia di KB).
+
+NIENTE FILE IN GIRO
+Il programma non lascia resti che crescono nel tempo: i file temporanei di una chiusura anomala vengono tolti al prossimo avvio (compresa la cartella _MEI dell'exe dentro Temp, se più vecchia di un giorno), i backup dei progetti annullati hanno un limite, i vecchi report di «Segnala un problema» sul Desktop sono eliminati dopo 14 giorni e una «Salva copia» interrotta dal browser non lascia cartelle a metà.
 
 COSE DA SAPERE
 • Tutto quello che scrivi e vedi finisce nel progetto, password comprese: metti in pausa quando entri in account personali.
+• Le scorciatoie (Ctrl+S, Alt+Tab, Win+D…) sono un passo ciascuna; un tasto tenuto premuto conta una volta sola.
+• Se in config.json metti registra_testo_digitato a false, al posto delle lettere viene salvato solo un pallino (utile per le password).
+• Il programma si apre una volta sola: se lo riavvii, riporta in primo piano quello già aperto.
 • Un programma aperto come amministratore potrebbe non essere registrato.
 • Viene catturato solo il monitor dove si trova il mouse.
 • La barretta del registratore viene nascosta dagli screenshot; se Windows non lo permette, il programma la copre con un riquadro scuro. Si può disattivare in Impostazioni.
@@ -1323,6 +1692,12 @@ def crea_report(cfg: dict, barra_nascosta=None) -> Path:
     cartella = Path.home() / "Desktop"
     if not cartella.is_dir():
         cartella = Path.home()
+    for vecchio in cartella.glob("report_registratore_*.txt"):  # i report di più di 14 giorni fa non servono più
+        try:
+            if time.time() - vecchio.stat().st_mtime > 14 * GIORNO:
+                vecchio.unlink()
+        except OSError:
+            pass
     nome = f"report_registratore_{datetime.datetime.now():%Y%m%d_%H%M%S}.txt"
     percorso = unique_path(cartella / nome)
     with open(percorso, "xb") as f:
@@ -1897,6 +2272,7 @@ class App:
         self._apri_progetto(self._progetti[int(sel[0])])
 
     def _apri_progetto(self, d: Path):
+        togli_tmp(d)
         try:  # rigenero la pagina cosi' i progetti vecchi hanno l'aspetto e le funzioni nuove
             dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
             genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
@@ -1923,6 +2299,7 @@ class App:
         """Continua a registrare dentro un progetto già esistente (passi nuovi in fondo)."""
         if self.rec is not None:
             return
+        togli_tmp(d)
         try:
             dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
             if not isinstance(dati.get("passi"), list):
@@ -2343,4 +2720,6 @@ class App:
 
 if __name__ == "__main__":
     if _istanza_unica():
+        togli_tmp(CONFIG_DIR)
+        pulisci_temporanei()
         App().run()
