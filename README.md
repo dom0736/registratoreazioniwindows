@@ -24,11 +24,7 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 
 ## Scaricare l'exe
 1. Vai su **Releases** (colonna a destra del repository) e scarica `RegistratoreAzioni.exe` dell'ultima versione.
-2. Avvialo. Se Windows mostra SmartScreen: *Ulteriori informazioni → Esegui comunque* (finché l'exe non è firmato).
-
-Politica di firma: vedi [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
-   Free code signing provided by [SignPath.io](https://signpath.io), 
-   certificate by [SignPath Foundation](https://signpath.org).
+2. Avvialo. Se Windows mostra SmartScreen: *Ulteriori informazioni → Esegui comunque* (l'exe non è firmato).
 
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
@@ -64,4 +60,4 @@ digitato, e puoi leggerlo prima di inviarlo. Allegalo alla mail con due righe su
 ## English summary
 Registratore Azioni is a free, open source (MIT) replacement for the Windows Problem Steps Recorder: it saves a screenshot for every click, drag or keyboard action and builds an editable HTML page with all the steps. Windows only. The interface is in Italian.
 
-Download `RegistratoreAzioni.exe` from **Releases**. Until the exe is signed, Windows SmartScreen may warn you: *More info → Run anyway*. Everything stays on your PC and nothing is sent anywhere. See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
+Download `RegistratoreAzioni.exe` from **Releases**. The exe is not code-signed, so Windows SmartScreen may warn you: *More info → Run anyway*. Everything stays on your PC and nothing is sent anywhere.
