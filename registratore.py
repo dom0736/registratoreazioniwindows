@@ -40,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.4"
+VERSION = "1.5"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -66,6 +66,7 @@ AZIONI = {
     "doppio": ("Doppio clic", (217, 70, 239)),
     "drag": ("Trascinamento", (245, 158, 11)),
     "tasto": ("Tastiera", (20, 184, 166)),
+    "ripresa": ("Ripresa", (99, 102, 241)),
 }
 
 TEMA_HTML = "scuro"  # tema di partenza delle pagine HTML (lo sceglie l'utente nell'app)
@@ -121,6 +122,7 @@ CONFIG_DEFAULT = {
     "pausa_digitazione_sec": 1.2,
     "tema": "scuro",
     "nascondi_barra": True,
+    "backup_massimo": 10,
 }
 
 
@@ -186,6 +188,65 @@ def elenca_progetti(radice: Path) -> list:
     except OSError:
         pass
     return sorted(trovati, key=lambda d: d.stat().st_mtime, reverse=True)
+
+
+# ---- cartella «backup cancellati»: niente si perde subito, ma ha un limite ----
+CARTELLA_BACKUP = "backup cancellati"
+BACKUP_MASSIMO = 10
+_GIORNI = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
+_MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
+         "settembre", "ottobre", "novembre", "dicembre"]
+
+
+def data_estesa(dt) -> str:
+    return f"{_GIORNI[dt.weekday()]} {dt.day} {_MESI[dt.month - 1]} {dt.year}"
+
+
+def pota_backup(bk: Path, massimo: int, tieni=None) -> None:
+    """Tiene al massimo `massimo` voci nel backup: elimina le più vecchie."""
+    massimo = max(1, int(massimo))
+    try:
+        voci = [d for d in Path(bk).iterdir() if d.is_dir()]
+        voci.sort(key=lambda d: d.stat().st_mtime)
+    except OSError:
+        return
+    for d in voci[:max(0, len(voci) - massimo)]:
+        if tieni is not None and d == tieni:
+            continue
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def destinazione_backup(radice: Path, nome: str, motivo: str):
+    bk = Path(radice) / CARTELLA_BACKUP
+    bk.mkdir(parents=True, exist_ok=True)
+    marca = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return bk, unique_path(bk / f"{nome}__{motivo}_{marca}")
+
+
+def sposta_in_backup(cartella: Path, radice: Path, motivo: str, massimo: int) -> Path:
+    """Sposta una cartella di progetto nel backup (mai cancellata subito)."""
+    cartella = Path(cartella)
+    bk, dest = destinazione_backup(radice, cartella.name, motivo)
+    try:
+        os.rename(cartella, dest)
+    except OSError:  # per esempio un file aperto: copio e poi tolgo l'originale
+        shutil.copytree(cartella, dest)
+        shutil.rmtree(cartella, ignore_errors=True)
+    try:
+        os.utime(dest, None)  # la data della voce è quella di oggi: serve a capire quali sono le più vecchie
+    except OSError:
+        pass
+    pota_backup(bk, massimo, tieni=dest)
+    return dest
+
+
+def copia_in_backup(cartella: Path, radice: Path, motivo: str, massimo: int) -> Path:
+    """Copia di sicurezza (l'originale resta dov'è): si usa quando qualcosa va storto."""
+    cartella = Path(cartella)
+    bk, dest = destinazione_backup(radice, cartella.name, motivo)
+    shutil.copytree(cartella, dest)
+    pota_backup(bk, massimo, tieni=dest)
+    return dest
 
 
 def pulisci_nome(nome: str) -> str:
@@ -340,8 +401,41 @@ def nome_tasto(key) -> str:
 # --------------------------------------------------------------------------
 # Registratore
 # --------------------------------------------------------------------------
+# ---- una sola istanza alla volta ----
+_MUTEX = None
+_EVENTO = None
+
+
+def _istanza_unica() -> bool:
+    """True se questa è la prima istanza. Se ce n'è già un'altra aperta, le chiede di riportarsi
+    in primo piano, mostra un avviso e restituisce False (il programma deve chiudersi)."""
+    global _MUTEX, _EVENTO
+    try:
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.CreateMutexW.restype = ctypes.c_void_p
+        k.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        k.CreateEventW.restype = ctypes.c_void_p
+        k.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+        k.SetEvent.argtypes = [ctypes.c_void_p]
+        _MUTEX = k.CreateMutexW(None, False, "Local\\RegistratoreAzioni.IstanzaUnica")
+        gia_aperto = ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+        _EVENTO = k.CreateEventW(None, False, False, "Local\\RegistratoreAzioni.MostraFinestra")
+        if not gia_aperto:
+            return True
+        if _EVENTO:
+            k.SetEvent(_EVENTO)
+        ctypes.windll.user32.MessageBoxW(
+            0, f"{APP} è già aperto: l'ho riportato in primo piano.\n\n"
+               "Se non lo vedi, controlla la barra delle applicazioni.",
+            APP, 0x40 | 0x40000)  # icona info + sempre in primo piano
+        return False
+    except Exception:
+        return True  # nel dubbio il programma si avvia lo stesso
+
+
+
 class Registratore:
-    def __init__(self, cartella: Path, nome_modo: str, modo: dict, cfg: dict):
+    def __init__(self, cartella: Path, nome_modo: str, modo: dict, cfg: dict, esistente: dict | None = None):
         self.dir = Path(cartella)
         self.nome_modo = nome_modo
         self.modo = modo
@@ -371,10 +465,75 @@ class Registratore:
         self.pausa_dig = float(cfg.get("pausa_digitazione_sec", 1.2))
         self.listeners = []
         self.worker = None
+        self.titolo = None          # None = il titolo è il nome della cartella
+        self.steps_prima = None     # passi che c'erano prima di questa ripresa (None = registrazione nuova)
+        self.immagini_prima = set()
+        if esistente:  # si riprende un progetto già registrato: si continua a numerare da dove era
+            self.steps = list(esistente.get("passi", []))
+            self.creato = esistente.get("creato") or self.creato
+            tit = esistente.get("titolo")
+            self.titolo = tit if tit and tit != self.dir.name else None
+            self.steps_prima = json.loads(json.dumps(self.steps))
+            try:
+                self.immagini_prima = {f.name for f in (self.dir / "immagini").iterdir()}
+            except OSError:
+                pass
+            numeri = [int(m.group(1)) for nome in self.immagini_prima if (m := re.match(r"(\d+)", nome))]
+            self.contatore = max(numeri, default=0)
+
+    @property
+    def ripresa(self) -> bool:
+        return self.steps_prima is not None
+
+    @staticmethod
+    def _conta_reali(steps) -> int:
+        return sum(1 for s in steps if s.get("tipo") != "ripresa")
+
+    @property
+    def n_passi(self) -> int:
+        """Passi veri (i segnaposto «ripresa» non contano)."""
+        return self._conta_reali(self.steps)
+
+    @property
+    def n_nuovi(self) -> int:
+        """Passi registrati in questa sessione (in una ripresa: solo quelli nuovi)."""
+        return self.n_passi - (self._conta_reali(self.steps_prima) if self.ripresa else 0)
+
+    def _segnaposto_ripresa(self) -> dict:
+        ora = datetime.datetime.now()
+        return {"n": None, "tipo": "ripresa", "az": "ripresa",
+                "testo": f"Registrazione ripresa · {data_estesa(ora)}, ore {ora:%H:%M}",
+                "finestra": "", "ora": ora.strftime("%H:%M:%S"), "img": ""}
+
+    def togli_ripresa_vuota(self):
+        """Se dopo l'ultima ripresa non è stato registrato niente, il segnaposto non serve."""
+        while self.steps and self.steps[-1].get("tipo") == "ripresa":
+            self.steps.pop()
+
+    def annulla_ripresa(self, radice: Path, massimo: int):
+        """Toglie i passi di questa ripresa: il progetto torna com'era. I passi tolti vanno nel backup."""
+        nuovi = self.steps[len(self.steps_prima):]
+        nuovi_file = sorted(f.name for f in (self.dir / "immagini").iterdir() if f.name not in self.immagini_prima)
+        dest = None
+        if nuovi_file or self._conta_reali(nuovi):
+            bk, dest = destinazione_backup(radice, self.dir.name, "ripresa-annullata")
+            (dest / "immagini").mkdir(parents=True)
+            for nome in nuovi_file:
+                shutil.move(str(self.dir / "immagini" / nome), str(dest / "immagini" / nome))
+            scrivi_json_atomico(dest / "passi.json", {
+                "progetto": self.dir.name, "titolo": self.titolo or self.dir.name, "creato": self.creato,
+                "modalita": self.nome_modo, "passi": nuovi})
+            pota_backup(bk, massimo, tieni=dest)
+        self.steps = json.loads(json.dumps(self.steps_prima))
+        self._salva_json()
+        self.scrivi_html()
+        return dest
 
     # ---- ciclo di vita ----
     def avvia(self):
         (self.dir / "immagini").mkdir(parents=True, exist_ok=True)
+        if self.ripresa:
+            self.steps.append(self._segnaposto_ripresa())  # segna quando e in che giorno è ripresa
         self.running = True
         self.worker = threading.Thread(target=self._worker, daemon=True)
         self.worker.start()
@@ -620,8 +779,8 @@ class Registratore:
         else:
             az = "tasto"
             testo = ev["testo"]
-            # Per la tastiera non c'e' un punto da cerchiare: una cornice colorata attorno a tutto lo schermo
-            d.rectangle([0, 0, img.width - 1, img.height - 1], outline=AZIONI[az][1], width=spessore * 2)
+            # Per la tastiera non c'e' un punto da cerchiare: nessuna cornice sullo screenshot
+            # (il testo digitato e il colore verde acqua stanno sul numero del passo, nella pagina HTML)
 
         fmt = str(self.modo.get("formato", "JPEG")).upper()
         q = int(self.modo.get("qualita", 65))
@@ -638,7 +797,7 @@ class Registratore:
             img.save(f, format=fmt, **opzioni_salvataggio(fmt, q))
 
         step = {
-            "n": len(self.steps) + 1,
+            "n": self.n_passi + 1,
             "tipo": kind,
             "az": az,
             "testo": testo,
@@ -650,7 +809,7 @@ class Registratore:
         self.ultimo_box = ({"step": step, "path": path, "fmt": fmt, "q": q, "box": box,
                             "raggio": raggio, "spessore": spessore} if kind == "click" else None)
         self._salva_json()
-        if len(self.steps) % 5 == 0:
+        if self.n_passi % 5 == 0:
             self.scrivi_html()
 
     def _segna_doppio(self):
@@ -681,7 +840,7 @@ class Registratore:
         try:
             scrivi_json_atomico(self.dir / "passi.json", {
                 "progetto": self.dir.name,
-                "titolo": self.dir.name,
+                "titolo": self.titolo or self.dir.name,
                 "creato": self.creato,
                 "modalita": self.nome_modo,
                 "passi": self.steps,
@@ -692,7 +851,7 @@ class Registratore:
 
     def scrivi_html(self):
         try:
-            genera_html(self.dir, self.dir.name, self.steps, self.nome_modo, self.creato)
+            genera_html(self.dir, self.titolo or self.dir.name, self.steps, self.nome_modo, self.creato)
         except OSError as e:
             self.errori.append(repr(e))
             _log.exception("Errore nella creazione di index.html")
@@ -745,6 +904,9 @@ h1{margin:0;font-size:1.4rem;line-height:1.25;letter-spacing:-.01em;overflow-wra
   background:var(--card);border:1px solid var(--cb);box-shadow:var(--sh);break-inside:avoid}
 .n{width:34px;height:34px;border-radius:50%;background:var(--az);color:#fff;display:grid;place-items:center;
   font:600 .85rem Consolas,"Cascadia Mono",monospace}
+.ripresa{display:flex;align-items:center;gap:14px;padding:4px 6px;color:var(--mut);break-inside:avoid}
+.ripresa::before,.ripresa::after{content:"";flex:1;height:1px;background:var(--cb)}
+.ripresa p{margin:0;font-weight:600;font-size:.85rem;text-align:center;overflow-wrap:anywhere}
 .d{margin:4px 0 0;font-weight:600;overflow-wrap:anywhere}
 .m{margin:2px 0 12px;color:var(--mut);font-size:.78rem;overflow-wrap:anywhere}
 [data-ed]{border-radius:8px;outline:none;cursor:text;padding:1px 6px;margin-left:-6px;margin-right:-6px;transition:background .12s}
@@ -854,6 +1016,7 @@ iconaTema();
 
 /* ---- modifica cliccando sul testo ---- */
 const az=p=>p.az||(p.tipo==='drag'?'drag':p.tipo==='tasto'?'tasto':'sinistro');
+const reali=()=>D.passi.filter(p=>p.tipo!=='ripresa').length;
 function edita(el,riferimento,leggi,scrivi){
   el.setAttribute('data-ed','');
   el.contentEditable='plaintext-only';
@@ -880,9 +1043,15 @@ function render(){
   document.title=D.titolo;
   let dt=D.creato;
   try{dt=new Date(D.creato).toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'});}catch(e){}
-  $('#sub').textContent=D.passi.length+' passi · '+dt+' · '+D.modalita;
+  $('#sub').textContent=reali()+' passi · '+dt+' · '+D.modalita;
   const L=$('#lista');L.textContent='';
   D.passi.forEach((p,i)=>{
+    if(p.tipo==='ripresa'){
+      const r=document.createElement('div');r.className='ripresa';
+      const rt=document.createElement('p');rt.textContent=p.testo;
+      edita(rt,()=>base.testi[i],()=>p.testo,x=>{p.testo=x;});
+      r.append(rt);L.append(r);return;
+    }
     const a=document.createElement('article');a.className='passo';a.dataset.az=az(p);
     const n=document.createElement('div');n.className='n';n.textContent=pad(p.n);
     const c=document.createElement('div');c.style.minWidth='0';
@@ -1010,11 +1179,11 @@ $('#bsal').onclick=salva;
 function apriLb(i){
   cur=i;const p=D.passi[i];
   $('#lbi').className='';$('#lbi').src=p.img;$('#lbo').href=p.img;
-  $('#lbc').textContent=pad(p.n)+' / '+pad(D.passi.length)+'  ·  '+p.testo;
+  $('#lbc').textContent=pad(p.n)+' / '+pad(reali())+'  ·  '+p.testo;
   $('#lb').hidden=false;document.body.style.overflow='hidden';
 }
 function chiudiLb(){$('#lb').hidden=true;$('#lbi').src='';document.body.style.overflow='';cur=-1;}
-function vai(d){const n=cur+d;if(n>=0&&n<D.passi.length)apriLb(n);}
+function vai(d){let n=cur+d;while(n>=0&&n<D.passi.length&&D.passi[n].tipo==='ripresa')n+=d;if(n>=0&&n<D.passi.length)apriLb(n);}
 $('#lbo').innerHTML=svg('apri');$('#lbo').firstChild.style.cssText='width:20px;height:20px';
 $('#lbx').onclick=chiudiLb;
 $('#lbp').onclick=()=>vai(-1);
@@ -1072,7 +1241,7 @@ GUIDA = f"""COME SI USA
 2. Lavora normalmente. A ogni clic, trascinamento o azione da tastiera viene salvato uno screenshot con un riquadro colorato. La rotellina del mouse non conta.
 3. Quando scrivi, il testo viene raggruppato: un passo per riga (per esempio «show ip route» + Invio), non uno per lettera.
 4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i due pulsanti rotondi della barretta in alto a destra (pausa e fine); si sposta trascinandola. Il pallino è rosso mentre registri, arancione in pausa.
-5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri. Anche chiudere la barretta (Alt+F4) porta a questa schermata.
+5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri, oppure «Annulla registrazione» (chiede conferma). Anche chiudere la barretta (Alt+F4) porta a questa schermata.
 
 I COLORI DEI RIQUADRI
 Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo nella pagina HTML):
@@ -1081,14 +1250,20 @@ Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo ne
 • Verde = clic centrale
 • Viola = doppio clic (due riquadri, uno dentro l'altro)
 • Arancione = trascinamento (dal quadratino piccolo al riquadro grande)
-• Verde acqua = tastiera (cornice attorno a tutto lo schermo)
+• Verde acqua = tastiera (colore del numero del passo; lo screenshot resta pulito, senza cornice)
 Se subito dopo un clic scorri con la rotellina, il riquadro non viene disegnato: la pagina si è spostata e finirebbe nel punto sbagliato.
 
 QUALITÀ DEGLI SCREENSHOT
 Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json.
 
+ANNULLARE UNA REGISTRAZIONE
+Dalla schermata di fine premi «Annulla registrazione»: il programma chiede conferma. Non cancella niente subito: la cartella va in «{CARTELLA_BACKUP}», dentro la cartella dei progetti, e la puoi recuperare riportandola fuori. Se ne tengono al massimo {BACKUP_MASSIMO} (il numero si cambia in Impostazioni): quando sono di più, vengono eliminate le più vecchie. Puoi svuotare la cartella a mano quando vuoi. Se c'è un errore mentre salvi, il programma fa una copia di sicurezza nella stessa cartella.
+
+RIPRENDERE UN PROGETTO
+Da «Apri un progetto» scegli il progetto e premi «Riprendi»: la registrazione riparte nella stessa cartella, anche il giorno dopo o a progetto finito, e i nuovi passi si aggiungono in fondo. Nella pagina HTML compare una riga con il giorno e l'ora in cui hai ripreso. Se annulli subito, il progetto resta com'era.
+
 IMPOSTAZIONI
-Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML) e se nascondere la barra del registratore dagli screenshot.
+Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML), se nascondere la barra del registratore dagli screenshot e quanti backup tenere.
 
 MODIFICARE UN PROGETTO
 Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (la prima volta soltanto: poi se la ricorda) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
@@ -1578,7 +1753,7 @@ class App:
     # ---- impostazioni ----
     def _scena_impostazioni(self):
         c = self.c
-        self._scena("impostazioni", 380, 420)
+        self._scena("impostazioni", 380, 520)
         self.root.title(f"Impostazioni · {APP}")
         self._sfondo_pronto()
 
@@ -1596,6 +1771,13 @@ class App:
         self._pillole(34, 326, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
                       self._imposta_barra, w=96)
         self._testo(34, 366, "Funziona su Windows 10 (2004 o successivi) e Windows 11.", FONT_S, c["mut"], width=312)
+
+        massimo = str(int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
+        opzioni = ["5", "10", "20", "50"]
+        self._etichetta(34, 412, "Backup cancellati: quanti tenerne")
+        self._pillole(34, 434, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup, w=72)
+        self._testo(34, 474, f"Le registrazioni annullate vanno nella cartella «{CARTELLA_BACKUP}»; "
+                             "oltre questo numero si elimina la più vecchia.", FONT_S, c["mut"], width=312)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
     def _imposta_tema(self, nome):
@@ -1603,6 +1785,11 @@ class App:
         self.tema = nome.lower()
         TEMA_HTML = self.tema
         self.cfg["tema"] = self.tema
+        salva_config(self.cfg)
+        self._scena_impostazioni()
+
+    def _imposta_backup(self, nome):
+        self.cfg["backup_massimo"] = int(nome)
         salva_config(self.cfg)
         self._scena_impostazioni()
 
@@ -1651,7 +1838,7 @@ class App:
     # ---- apri un progetto (la modifica si fa dalla pagina HTML) ----
     def _scena_progetti(self):
         c = self.c
-        self._scena("progetti", 380, 500)
+        self._scena("progetti", 380, 560)
         self.root.title(f"Apri un progetto · {APP}")
         self._campo_bg(34, 126, 312, 190)
         self._sfondo_pronto()
@@ -1679,10 +1866,13 @@ class App:
                         c["mut"], anchor="center", justify="center")
         self.lb = lb
         self._bottone(34, 328, 140, 32, "Altra cartella…", self._altra_cartella, font=FONT)
-        self._bottone(34, 372, 312, 44, "Apri", self._apri_selezionato, primario=True)
-        self._testo(34, 428, "Nella pagina clicca sul titolo o su una descrizione per modificarla: "
-                             "la copia si salva come «nome_modificato».", FONT_S, c["mut"], width=312)
-        self.t_msg = self._testo(34, 468, "", FONT_S, c["err"], width=312)
+        self._bottone(34, 372, 153, 44, "Apri", self._apri_selezionato, primario=True)
+        self._bottone(193, 372, 153, 44, "Riprendi", self._riprendi_selezionato)
+        self._testo(34, 428, "Apri: guarda la pagina; clicca sul titolo o su una descrizione per modificarla "
+                             "(la copia si salva come «nome_modificato»).\n"
+                             "Riprendi: continua a registrare nello stesso progetto, anche un altro giorno; "
+                             "nella pagina compare una riga con la data.", FONT_S, c["mut"], width=312)
+        self.t_msg = self._testo(34, 526, "", FONT_S, c["err"], width=312)
         self.root.bind("<Return>", lambda _e: self._apri_selezionato())
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
@@ -1719,6 +1909,42 @@ class App:
             self._msg(f"Non riesco ad aprire la pagina: {e}", ok=False)
             return
         self._scena_avvio(msg=f"Aperto «{d.name}». Clicca sul titolo o su una descrizione per modificarla.")
+
+    def _riprendi_selezionato(self):
+        if self.scena != "progetti":
+            return
+        sel = self.lb.curselection()
+        if not sel:
+            self._msg("Scegli un progetto dalla lista.", ok=False)
+            return
+        self._riprendi_progetto(self._progetti[int(sel[0])])
+
+    def _riprendi_progetto(self, d: Path):
+        """Continua a registrare dentro un progetto già esistente (passi nuovi in fondo)."""
+        if self.rec is not None:
+            return
+        try:
+            dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
+            if not isinstance(dati.get("passi"), list):
+                raise ValueError("passi.json non è valido")
+        except Exception as e:
+            self._msg(f"Non riesco a leggere il progetto: {e}", ok=False)
+            return
+        nome_modo = dati.get("modalita")
+        if nome_modo not in self.cfg["modalita"]:
+            nome_modo = getattr(self, "var_modo", "Normale")
+            if nome_modo not in self.cfg["modalita"]:
+                nome_modo = "Normale"
+        self.rec = Registratore(d, nome_modo, self.cfg["modalita"][nome_modo], self.cfg, esistente=dati)
+        self.in_chiusura = False
+        try:
+            self.rec.avvia()
+        except Exception as e:
+            self.rec = None
+            self._msg(f"Errore all'avvio: {e}", ok=False)
+            return
+        self._scena_registrazione(prima_volta=True)
+        self._poll()
 
     # ---- avvio registrazione ----
     def _avvia(self):
@@ -1846,7 +2072,7 @@ class App:
         in_pausa = self.rec.paused
         self.cv.itemconfig(self.dot, fill=c["pausa"] if in_pausa else c["rec"])
         if not self._hover:
-            n = len(self.rec.steps)
+            n = self.rec.n_passi
             testo = "1 passo" if n == 1 else f"{n} passi"
             self.cv.itemconfig(self.t_passi, text=f"In pausa · {n}" if in_pausa else testo,
                                fill=c["pausa"] if in_pausa else c["fg"])
@@ -1895,8 +2121,8 @@ class App:
 
     def _scena_fine(self):
         c = self.c
-        n = len(self.rec.steps)
-        self._scena("fine", 380, 330, "centro")
+        n = self.rec.n_passi
+        self._scena("fine", 380, 372, "centro")
         self.root.title(f"Registrazione ferma · {APP}")
         self.root.attributes("-topmost", False)
         self._campo_bg(34, 114, 312, 42)
@@ -1910,7 +2136,8 @@ class App:
         e.select_range(0, "end")
         self._bottone(34, 178, 312, 48, "Salva e apri", self._salva, primario=True)
         self._bottone(34, 236, 312, 40, "Riprendi registrazione", self._riprendi)
-        self._testo(190, 288, "Invio salva  ·  Esc riprende", FONT_S, c["mut"], anchor="n")
+        self._bottone(34, 284, 312, 36, "Annulla registrazione", self._scena_annulla, font=FONT)
+        self._testo(190, 332, "Invio salva  ·  Esc riprende", FONT_S, c["mut"], anchor="n")
         self.root.bind("<Return>", lambda _e: self._salva())
         self.root.bind("<Escape>", lambda _e: self._riprendi())
 
@@ -1920,26 +2147,120 @@ class App:
         self.rec.riprendi()
         self._scena_registrazione()
 
+    # ---- annullare: chiede conferma e non cancella subito (va nel backup) ----
+    def _scena_annulla(self):
+        if not self.rec or self.in_chiusura:
+            return
+        c = self.c
+        rec = self.rec
+        n = rec.n_nuovi
+        massimo = int(self.cfg.get("backup_massimo", BACKUP_MASSIMO))
+        self._scena("annulla", 380, 372, "centro")
+        self.root.title(f"Annulla registrazione · {APP}")
+        self.root.attributes("-topmost", False)
+        self._sfondo_pronto()
+        quanti = "1 passo" if n == 1 else f"{n} passi"
+        self._intestazione("Annullare la registrazione?", f"{quanti} in questa ripresa" if rec.ripresa else quanti)
+        if rec.ripresa:
+            testo = (f"Tolgo solo i passi di questa ripresa: il progetto «{rec.dir.name}» resta com'era prima. "
+                     f"I passi tolti non vengono cancellati subito: vanno nella cartella «{CARTELLA_BACKUP}», "
+                     f"accanto ai progetti (ne tengo al massimo {massimo}, poi elimino i più vecchi).")
+        elif n == 0:
+            testo = f"Non c'è niente da salvare: la cartella vuota «{rec.dir.name}» verrà eliminata."
+        else:
+            testo = (f"La cartella «{rec.dir.name}» non viene cancellata subito: va nella cartella "
+                     f"«{CARTELLA_BACKUP}», accanto ai progetti, e la puoi recuperare. "
+                     f"Ne tengo al massimo {massimo}: quando sono di più, elimino i più vecchi.")
+        self._testo(34, 100, testo, FONT_S, c["mut"], width=312)
+        self._bottone(34, 236, 312, 48, "Torna indietro", self._scena_fine, primario=True)
+        self._bottone(34, 292, 312, 40, "Sì, annulla", self._annulla_conferma)
+        self._testo(190, 344, "Invio ed Esc tornano indietro", FONT_S, c["mut"], anchor="n")
+        self.root.bind("<Return>", lambda _e: self._scena_fine())
+        self.root.bind("<Escape>", lambda _e: self._scena_fine())
+
+    def _annulla_conferma(self):
+        if not self.rec or self.in_chiusura or self.scena != "annulla":
+            return
+        self.in_chiusura = True
+        rec = self.rec
+        nome = rec.dir.name
+        radice = rec.dir.parent
+        massimo = int(self.cfg.get("backup_massimo", BACKUP_MASSIMO))
+        ok = True
+        try:
+            rec.ferma()
+            if rec.ripresa:
+                rec.annulla_ripresa(radice, massimo)
+                msg = f"Ripresa annullata: «{nome}» è com'era prima. I passi tolti sono in «{CARTELLA_BACKUP}»."
+            elif rec.n_passi == 0:
+                shutil.rmtree(rec.dir, ignore_errors=True)
+                msg = "Registrazione annullata (era vuota)."
+            else:
+                sposta_in_backup(rec.dir, radice, "annullata", massimo)
+                msg = f"Registrazione annullata. La cartella «{nome}» è in «{CARTELLA_BACKUP}»."
+        except Exception as e:
+            _log.exception("Errore nell'annullare la registrazione")
+            ok = False
+            extra = ""
+            try:
+                rec._salva_json()
+                rec.scrivi_html()
+                copia_in_backup(rec.dir, radice, "errore", massimo)
+                extra = f" Ho fatto una copia di sicurezza in «{CARTELLA_BACKUP}»."
+            except Exception:
+                _log.exception("Anche la copia di sicurezza è fallita")
+            msg = f"Non sono riuscito ad annullare ({e}). La cartella «{nome}» è rimasta com'era.{extra}"
+        self.rec = None
+        self.in_chiusura = False
+        self.var_nome.set("")
+        self._scena_avvio(msg=msg, ok=ok)
+
     def _salva(self, chiudi=False):
         if not self.rec or self.in_chiusura:
             return
+        rec = self.rec
+        try:
+            self._salva_interno(chiudi)
+        except Exception as e:  # qualunque errore: i passi non si perdono, faccio anche una copia nel backup
+            _log.exception("Errore nel salvataggio")
+            self.rec = None
+            self.in_chiusura = False
+            extra = ""
+            try:
+                copia_in_backup(rec.dir, rec.dir.parent, "errore", int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
+                extra = f" Ho fatto una copia di sicurezza in «{CARTELLA_BACKUP}»."
+            except Exception:
+                _log.exception("Anche la copia di sicurezza è fallita")
+            if chiudi:
+                try:
+                    self.root.destroy()
+                except Exception:
+                    pass
+                return
+            self.var_nome.set("")
+            self._scena_avvio(msg=f"Errore nel salvare ({e}).{extra} I passi sono nella cartella «{rec.dir.name}».",
+                              ok=False)
+
+    def _salva_interno(self, chiudi=False):
         self.in_chiusura = True
         rec = self.rec
         attuale = rec.dir.name
         nuovo = pulisci_nome(self.var_fine.get())
         rec.ferma()
+        rec.togli_ripresa_vuota()
         nota = ""
         if nuovo and nuovo != attuale:
             destinazione = unique_path(rec.dir.parent / nuovo)
             try:
                 os.rename(rec.dir, destinazione)  # non sovrascrive: ho scelto un nome libero
                 rec.dir = destinazione
+                rec.titolo = None  # il titolo segue il nuovo nome della cartella
             except OSError as e:
                 nota = f" Non sono riuscito a rinominare, resta «{attuale}» ({e})."
         rec._salva_json()
         rec.scrivi_html()
         index = rec.dir / "index.html"
-        n = len(rec.steps)
+        n = rec.n_passi
         errori = rec.errori[:]
         cartella = rec.dir
         self.rec = None
@@ -1992,9 +2313,34 @@ class App:
                 return
         self.root.destroy()
 
+    def _controlla_richiamo(self):
+        """Una seconda copia del programma ci chiede di mostrarci: riportiamo la finestra davanti."""
+        try:
+            if _EVENTO and ctypes.windll.kernel32.WaitForSingleObject(ctypes.c_void_p(_EVENTO), 0) == 0:
+                self._porta_in_primo_piano()
+        except Exception:
+            pass
+        try:
+            self.root.after(300, self._controlla_richiamo)
+        except Exception:
+            pass
+
+    def _porta_in_primo_piano(self):
+        r = self.root
+        try:
+            r.deiconify()
+            r.lift()
+            r.attributes("-topmost", True)
+            r.focus_force()
+            r.after(400, lambda: r.attributes("-topmost", False))
+        except Exception:
+            pass
+
     def run(self):
+        self.root.after(300, self._controlla_richiamo)
         self.root.mainloop()
 
 
 if __name__ == "__main__":
-    App().run()
+    if _istanza_unica():
+        App().run()
