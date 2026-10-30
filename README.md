@@ -12,9 +12,11 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 - Tutto in una sola finestra, senza popup. Durante la registrazione resta solo una barretta piccola e trascinabile (pallino rosso fisso, pulsanti rotondi per pausa e fine), nascosta dagli screenshot. Con **Fine** la registrazione si ferma ma non si salva: puoi scegliere il nome e salvare, oppure **Riprendere** da dove eri.
 - Il testo digitato viene raggruppato: una riga di comando = un passo, non uno per lettera.
 - Quattro qualità (Minima, Leggera, Normale, Nitida) per tenere leggere le immagini.
-- Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini, esportazione in PDF.
+- Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
+- **Stampa e salva** (icona della stampante o Ctrl+P): anteprima impaginata, scelta dei passi da includere, formato A4/Letter, verticale/orizzontale, margini, passi per pagina, cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco). Poi «Stampa / Salva PDF…» apre la finestra di stampa del browser: scegliendo «Salva come PDF» ottieni il PDF. Si può anche scaricare l'elenco dei passi in Markdown.
 - **Modifica dalla pagina HTML**: clicchi sul titolo o su una descrizione, scrivi e premi **Salva copia**: nasce la cartella `nome_modificato` accanto all'originale, che non cambia. Il browser chiede una volta di scegliere la cartella che contiene il progetto (serve Edge o Chrome).
 - Non sovrascrive mai nulla: se un nome esiste già aggiunge `_2`, `_3`…
+- Non lascia file in giro: i `.tmp` di una chiusura anomala e le vecchie cartelle `_MEI` dell'exe in Temp vengono tolti all'avvio successivo, i backup hanno un limite, i report vecchi sul Desktop spariscono dopo 14 giorni, una «Salva copia» fallita non lascia cartelle a metà.
 - La barra del registratore viene nascosta dagli screenshot (Windows 10 2004 o successivi).
 - Funziona solo su Windows.
 
@@ -29,13 +31,14 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
 Per usare un'icona personalizzata basta aggiungere un `icon.png` quadrato (512×512 va benissimo, anche più grande) nella radice del repository.
+Il file `marchio_registratore.txt` serve alla pulizia automatica delle cartelle temporanee: tienilo nel repository.
 Gli angoli vengono arrotondati in automatico per l'exe, la finestra e la pagina HTML. I colori dell'interfaccia seguono l'icona (grigio-blu, blu→magenta, pallino rosso). Senza `icon.png` il programma usa un'icona di riserva.
 
 In locale, con Python 3.12:
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput registratore.py
+pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." registratore.py
 ```
 
 ## Impostazioni
