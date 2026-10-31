@@ -27,6 +27,7 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Scaricare l'exe
 1. Vai su **Releases** (colonna a destra del repository) e scarica `RegistratoreAzioni.exe` dell'ultima versione.
 2. Avvialo. Se Windows mostra SmartScreen: *Ulteriori informazioni → Esegui comunque* (l'exe non è firmato).
+3. **L'unico exe ufficiale è quello della pagina Releases di questo repository.** Copie scaricate da altri siti o condivise da altri non sono garantite. Nelle note di ogni release trovi l'impronta **SHA256** dell'exe: puoi confrontarla con PowerShell, `Get-FileHash RegistratoreAzioni.exe`.
 
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
@@ -49,6 +50,7 @@ la pausa che chiude un passo di testo (`pausa_digitazione_sec`), `registra_testo
 ## Privacy
 Il programma registra tutto quello che fai e scrivi mentre è in funzione, password comprese: usa la pausa quando serve.
 Tutti i dati restano sul tuo PC, nella cartella del progetto. Non viene inviato nulla.
+Usalo solo sul tuo PC o con il consenso di chi lo usa: registrare altre persone senza che lo sappiano non è ok.
 
 ## Open source e segnalazioni
 Il progetto è open source (licenza MIT) e mi fa piacere che circoli: più persone lo provano, più errori si trovano.
