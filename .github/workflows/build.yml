@@ -39,8 +39,8 @@ jobs:
           name: RegistratoreAzioni
           path: dist/RegistratoreAzioni.exe
 
-      # --- FIRMA (per ora disattivata: SignPath ha rifiutato la domanda, si puo' riprovare piu' avanti) ---
-      # Se la domanda verra' approvata: togli i # e usa i valori esatti che da' SignPath.
+      # --- FIRMA DIGITALE (per ora non attiva) ---
+      # Per attivarla: togli i # e usa i valori del servizio di firma scelto.
       # - uses: signpath/github-action-submit-signing-request@v1
       #   with:
       #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -52,8 +52,31 @@ jobs:
       #     output-artifact-directory: dist-firmato
       # Se firmi, nella release qui sotto cambia il percorso in dist-firmato/RegistratoreAzioni.exe
 
+      - name: Calcola l'impronta SHA256 (solo con un tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: hash
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash dist/RegistratoreAzioni.exe -Algorithm SHA256).Hash
+          "sha=$h" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Pubblica nelle Releases (solo con un tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/RegistratoreAzioni.exe
+          body: |
+            Exe non firmato: se Windows mostra SmartScreen scegli *Ulteriori informazioni → Esegui comunque*.
+
+            SHA256: `${{ steps.hash.outputs.sha }}`
+
+      # Tiene in Releases solo l'ultima versione: cancella le release (e i tag) piu' vecchie.
+      - name: Rimuovi le release vecchie (solo con un tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ultimo = "${{ github.ref_name }}"
+          $vecchie = gh release list --repo "${{ github.repository }}" --limit 100 --json tagName --jq ".[].tagName" | Where-Object { $_ -and $_ -ne $ultimo }
+          foreach ($t in $vecchie) { gh release delete $t --repo "${{ github.repository }}" --cleanup-tag --yes }
