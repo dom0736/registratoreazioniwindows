@@ -39,8 +39,8 @@ jobs:
           name: RegistratoreAzioni
           path: dist/RegistratoreAzioni.exe
 
-      # --- FIRMA (da attivare quando SignPath approva il progetto) ---
-      # Togli i # e usa i valori esatti che ti da' SignPath.
+      # --- FIRMA (per ora disattivata: SignPath ha rifiutato la domanda, si puo' riprovare piu' avanti) ---
+      # Se la domanda verra' approvata: togli i # e usa i valori esatti che da' SignPath.
       # - uses: signpath/github-action-submit-signing-request@v1
       #   with:
       #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
