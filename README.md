@@ -52,11 +52,14 @@ Tutti i dati restano sul tuo PC, nella cartella del progetto. Non viene inviato 
 
 ## Open source e segnalazioni
 Il progetto è open source (licenza MIT) e mi fa piacere che circoli: più persone lo provano, più errori si trovano.
-Se qualcosa non va o hai un'idea, scrivimi a **domenico.castaldod29@gmail.com**.
+Se qualcosa non va o hai un'idea, apri una segnalazione nella scheda **Issues** del repository oppure scrivimi a **domenico.castaldod29@gmail.com**.
 
 Dentro il programma c'è il pulsante **Segnala un problema**: crea un file di report con i dati tecnici utili per
 sistemare l'errore (versione, Windows, schermi, impostazioni ed errori registrati). Non contiene screenshot né il testo
 digitato, e puoi leggerlo prima di inviarlo. Allegalo alla mail con due righe su cosa stavi facendo.
+
+## Autore
+Creato da **Domenico Castaldo**, studente e appassionato di elettronica e informatica. Gli altri miei progetti: [dcastaldo.vercel.app](https://dcastaldo.vercel.app).
 
 ---
 
@@ -64,3 +67,5 @@ digitato, e puoi leggerlo prima di inviarlo. Allegalo alla mail con due righe su
 Registratore Azioni is a free, open source (MIT) replacement for the Windows Problem Steps Recorder: it saves a screenshot for every click, drag or keyboard action and builds an editable HTML page with all the steps. Windows only. The interface is in Italian.
 
 Download `RegistratoreAzioni.exe` from **Releases**. The exe is not code-signed, so Windows SmartScreen may warn you: *More info → Run anyway*. Everything stays on your PC and nothing is sent anywhere.
+
+Created by Domenico Castaldo — [dcastaldo.vercel.app](https://dcastaldo.vercel.app). Bug reports: open an issue on GitHub.
