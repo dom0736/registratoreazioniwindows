@@ -10,6 +10,8 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 - Uno screenshot per ogni clic, trascinamento o azione da tastiera (la rotellina del mouse è ignorata).
 - Un colore per ogni tipo di azione: rosso clic sinistro, blu destro, verde centrale, viola doppio clic, arancione trascinamento, verde acqua tastiera.
 - Tutto in una sola finestra, senza popup. Durante la registrazione resta solo una barretta piccola e trascinabile (pallino rosso fisso, pulsanti rotondi per pausa e fine), nascosta dagli screenshot. Con **Fine** la registrazione si ferma ma non si salva: puoi scegliere il nome e salvare, oppure **Riprendere** da dove eri.
+- **Solo un programma**: nella schermata iniziale, «Cosa registrare» permette di scegliere un programma aperto. Clic e tasti fatti altrove vengono ignorati (utile se trascini una finestra o ne apri un'altra senza accorgertene).
+- **Ultimi passi**: il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi registrati, aggiornato in tempo reale.
 - Il testo digitato viene raggruppato: una riga di comando = un passo, non uno per lettera.
 - Quattro qualità (Minima, Leggera, Normale, Nitida) per tenere leggere le immagini.
 - Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
