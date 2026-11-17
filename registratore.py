@@ -72,6 +72,12 @@ AZIONI = {
 TEMA_HTML = "scuro"  # tema di partenza delle pagine HTML (lo sceglie l'utente nell'app)
 
 
+# Barretta di registrazione: larghezza normale, larghezza e altezza con il pannello degli ultimi passi
+BARRA_STRETTA, BARRA_LARGA = 224, 310
+PASSI_RIGHE, PASSI_RIGA = 5, 36
+PASSI_ALTEZZA = 12 + PASSI_RIGHE * PASSI_RIGA + 16  # spazio sotto la barra (riga «Solo …» compresa)
+
+
 def risorsa(nome: str) -> Path:
     """File incluso nell'exe (o accanto allo script, quando si lancia da Python)."""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -336,6 +342,119 @@ def finestra_attiva() -> str:
         return ""
 
 
+def _pid_finestra(hwnd) -> int:
+    try:
+        u = ctypes.windll.user32
+        u.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        u.GetWindowThreadProcessId.restype = wintypes.DWORD
+        pid = wintypes.DWORD(0)
+        u.GetWindowThreadProcessId(wintypes.HWND(hwnd), ctypes.byref(pid))
+        return int(pid.value)
+    except Exception:
+        return 0
+
+
+def exe_finestra(hwnd) -> str:
+    """Nome del programma a cui appartiene la finestra (es. 'chrome.exe'), vuoto se non si riesce a saperlo."""
+    if not hwnd:
+        return ""
+    try:
+        pid = _pid_finestra(hwnd)
+        if not pid:
+            return ""
+        k = ctypes.windll.kernel32
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        k.OpenProcess.restype = wintypes.HANDLE
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        k.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                 ctypes.POINTER(wintypes.DWORD)]
+        k.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        h = k.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            n = wintypes.DWORD(1024)
+            if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+                return os.path.basename(buf.value)
+        finally:
+            k.CloseHandle(h)
+    except Exception:
+        pass
+    return ""
+
+
+def finestra_primo_piano() -> int:
+    try:
+        u = ctypes.windll.user32
+        u.GetForegroundWindow.restype = ctypes.c_void_p
+        return int(u.GetForegroundWindow() or 0)
+    except Exception:
+        return 0
+
+
+def finestra_sotto_punto(x: int, y: int) -> int:
+    """Finestra (di primo livello) che si trova sotto il punto dello schermo."""
+    try:
+        u = ctypes.windll.user32
+        u.WindowFromPoint.argtypes = [wintypes.POINT]
+        u.WindowFromPoint.restype = ctypes.c_void_p
+        u.GetAncestor.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        u.GetAncestor.restype = ctypes.c_void_p
+        h = u.WindowFromPoint(wintypes.POINT(int(x), int(y)))
+        if not h:
+            return 0
+        return int(u.GetAncestor(h, 2) or h)  # 2 = GA_ROOT
+    except Exception:
+        return 0
+
+
+def elenca_app() -> list:
+    """Programmi con una finestra aperta: [(nome_exe, titolo_di_una_finestra)], in ordine alfabetico.
+    Esclude questo programma, le finestre nascoste e quelle di servizio."""
+    trovati = {}
+    try:
+        u = ctypes.windll.user32
+        u.IsWindowVisible.argtypes = [wintypes.HWND]
+        u.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+        u.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        u.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+        proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        miei = os.getpid()
+        dwm = ctypes.windll.dwmapi
+
+        def cb(hwnd, _lp):
+            try:
+                if not u.IsWindowVisible(hwnd):
+                    return True
+                n = u.GetWindowTextLengthW(hwnd)
+                if n <= 0:
+                    return True
+                nascosta = wintypes.DWORD(0)  # DWMWA_CLOAKED: finestre «fantasma» (altri desktop, app sospese)
+                if dwm.DwmGetWindowAttribute(wintypes.HWND(hwnd), 14, ctypes.byref(nascosta), 4) == 0 and nascosta.value:
+                    return True
+                stile = u.GetWindowLongW(hwnd, -20) & 0xFFFFFFFF
+                if stile & 0x80 and not stile & 0x40000:  # finestra strumenti, non nella barra delle applicazioni
+                    return True
+                if _pid_finestra(hwnd) == miei:
+                    return True
+                buf = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(hwnd, buf, n + 1)
+                titolo = buf.value.strip()
+                exe = exe_finestra(hwnd)
+                if not exe or titolo == "Program Manager" or exe.lower() == "textinputhost.exe":
+                    return True
+                trovati.setdefault(exe.lower(), (exe, titolo))
+            except Exception:
+                pass
+            return True
+
+        u.EnumWindows(proc(cb), 0)
+    except Exception:
+        _log.exception("Errore nell'elenco dei programmi aperti")
+    return sorted(trovati.values(), key=lambda v: v[0].lower())
+
+
 def nascondi_da_cattura(hwnd: int, nascondi: bool = True) -> bool:
     """Esclude la finestra dagli screenshot (Windows 10 versione 2004 o successive)."""
     try:
@@ -499,8 +618,10 @@ def _istanza_unica() -> bool:
 
 
 class Registratore:
-    def __init__(self, cartella: Path, nome_modo: str, modo: dict, cfg: dict, esistente: dict | None = None):
+    def __init__(self, cartella: Path, nome_modo: str, modo: dict, cfg: dict, esistente: dict | None = None,
+                 app: str | None = None):
         self.dir = Path(cartella)
+        self.app = (app or "").lower() or None  # se impostato: si registra solo questo programma (es. "chrome.exe")
         self.nome_modo = nome_modo
         self.modo = modo
         self.cfg = cfg
@@ -641,6 +762,14 @@ class Registratore:
         self.paused = False
         self.press = None
 
+    def _app_ok(self, x=None, y=None) -> bool:
+        """True se l'azione va registrata. Senza filtro è sempre vero; con il filtro conta la finestra
+        sotto il mouse (clic) o quella in primo piano (tastiera)."""
+        if not self.app:
+            return True
+        hwnd = finestra_sotto_punto(x, y) if x is not None else finestra_primo_piano()
+        return exe_finestra(hwnd).lower() == self.app
+
     # ---- mouse ----
     def _on_scroll(self, x, y, dx, dy):
         # La rotellina non crea passi, ma sposta la pagina: ricordo quando e' successo
@@ -658,6 +787,9 @@ class Registratore:
             return
         now = time.time()
         if pressed:
+            if not self._app_ok(x, y):  # clic su un altro programma: lo ignoro (e ignoro anche il rilascio)
+                self.press = None
+                return
             self.press = (x, y, now, button)
             self._flush_typing()
             nome = {Button.left: "sinistro", Button.right: "destro",
@@ -693,6 +825,8 @@ class Registratore:
             self.mods.add(g)
             return
         if not self.running or self.paused or key in TASTI_IGNORATI:
+            return
+        if not self._app_ok():  # sto scrivendo in un altro programma
             return
 
         mods = self.mods
@@ -1590,8 +1724,14 @@ GUIDA = f"""COME SI USA
 1. Scrivi il nome del progetto e premi «Avvia registrazione». I progetti vengono salvati nella cartella indicata in Impostazioni (la puoi cambiare quando vuoi).
 2. Lavora normalmente. A ogni clic, trascinamento o azione da tastiera viene salvato uno screenshot con un riquadro colorato. La rotellina del mouse non conta.
 3. Quando scrivi, il testo viene raggruppato: un passo per riga (per esempio «show ip route» + Invio), non uno per lettera.
-4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i due pulsanti rotondi della barretta in alto a destra (pausa e fine); si sposta trascinandola. Il pallino è rosso mentre registri, arancione in pausa.
+4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i pulsanti rotondi della barretta in alto a destra (ultimi passi, pausa e fine); si sposta trascinandola. Il pallino è rosso mentre registri, arancione in pausa.
 5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri, oppure «Annulla registrazione» (chiede conferma). Anche chiudere la barretta (Alt+F4) porta a questa schermata.
+
+REGISTRARE SOLO UN PROGRAMMA
+Nella schermata iniziale, sotto «Cosa registrare», puoi scegliere un programma tra quelli aperti (apri prima il programma, poi premi «Aggiorna elenco»). Da quel momento vengono registrati solo i clic fatti sulle finestre di quel programma e i tasti premuti mentre è in primo piano: clic e tasti su altri programmi, o sul desktop, vengono ignorati. Lo screenshot resta comunque dell'intero schermo. La scelta vale per questa sessione: al prossimo avvio si torna a «Tutto lo schermo».
+
+GLI ULTIMI PASSI
+Il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi (il più recente in alto, con il colore dell'azione e la finestra in cui è avvenuto); si aggiorna da solo mentre registri. Premilo di nuovo per richiuderlo. L'elenco non compare negli screenshot.
 
 I COLORI DEI RIQUADRI
 Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo nella pagina HTML):
@@ -1647,6 +1787,7 @@ COSE DA SAPERE
 • Se in config.json metti registra_testo_digitato a false, al posto delle lettere viene salvato solo un pallino (utile per le password).
 • Il programma si apre una volta sola: se lo riavvii, riporta in primo piano quello già aperto.
 • Un programma aperto come amministratore potrebbe non essere registrato.
+• Con «Solo un programma», le app del Microsoft Store (Calcolatrice, Impostazioni…) risultano tutte come ApplicationFrameHost.exe: scegliendola si registrano tutte insieme.
 • Viene catturato solo il monitor dove si trova il mouse.
 • La barretta del registratore viene nascosta dagli screenshot; se Windows non lo permette, il programma la copre con un riquadro scuro. Si può disattivare in Impostazioni.
 
@@ -1870,6 +2011,9 @@ class App:
         self.var_fine = tk.StringVar(master=self.root)
         self.barra_nascosta = None
         self.rec = None
+        self.app_scelta = None      # None = tutto lo schermo; altrimenti (nome_exe, titolo) del programma da registrare
+        self.mostra_passi = False   # pannello «ultimi passi» aperto sulla barretta
+        self._firma_passi = None
         self.in_chiusura = False
         self.scena = ""
         self.base = None
@@ -1937,7 +2081,7 @@ class App:
         self.root.update_idletasks()
         hw = hwnd_finestra(self.root)
         if senza_bordo:
-            arrotonda_finestra(hw, W, H, H)
+            arrotonda_finestra(hw, W, H, min(H, self._px(40)))
         else:
             togli_arrotondamento(hw)
             colora_titolo(hw, _rgb(self.c["grad"][0]), _rgb(self.c["fg"]), self.tema == "scuro")
@@ -1949,6 +2093,13 @@ class App:
             x, y = sw - W - self._px(24), self._px(10)
         elif pos == "centro":
             x, y = (sw - W) // 2, max(10, (sh - H) // 3)
+        elif pos == "rec_resta":  # la barra cambia larghezza: il bordo destro resta dov'è
+            m = re.match(r"(\d+)x\d+([+-]\d+)([+-]\d+)", r.geometry())
+            if m:
+                x, y = int(m.group(2)) + int(m.group(1)) - W, int(m.group(3))
+            else:
+                x, y = sw - W - self._px(24), self._px(10)
+            x, y = max(0, min(x, sw - W)), max(0, min(y, sh - H))
         else:  # resta dov'e'
             m = re.match(r"\d+x\d+([+-]\d+)([+-]\d+)", r.geometry())
             x, y = (int(m.group(1)), int(m.group(2))) if m else (100, 100)
@@ -2075,7 +2226,7 @@ class App:
         c = self.c
         righe = max(1, -(-len(msg) // 50)) if msg else 1
         self._righe_msg = righe
-        self._scena("avvio", 380, 446 + 14 * righe, pos)
+        self._scena("avvio", 380, 518 + 14 * righe, pos)
         self.root.title(APP)
         self.root.attributes("-topmost", False)
         nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
@@ -2095,13 +2246,20 @@ class App:
         self._sel_pill = self._pillole(34, 196, list(self.cfg["modalita"]), self.var_modo, self._sel_modo)
         self._sel_modo(self.var_modo, salva=False)
 
-        self._bottone(34, 264, 312, 48, "Avvia registrazione", self._avvia, primario=True)
+        self._etichetta(34, 264, "Cosa registrare")
+        if self.app_scelta:
+            testo_app = f"Solo {self.app_scelta[0]}   ›"
+        else:
+            testo_app = "Tutto lo schermo   ›"
+        self._bottone(34, 284, 312, 36, testo_app, self._scena_app, font=FONT)
+
+        self._bottone(34, 336, 312, 48, "Avvia registrazione", self._avvia, primario=True)
         pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
         fine = str(self.cfg.get("tasto_fine", "f9")).upper()
-        self._bottone(34, 320, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
-        self._testo(190, 368, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
+        self._bottone(34, 392, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
+        self._testo(190, 440, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
 
-        y_msg = 390
+        y_msg = 462
         self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
         y_linea = y_msg + 14 * righe + 10
         self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
@@ -2124,6 +2282,56 @@ class App:
         if salva:
             self.cfg["modalita_corrente"] = nome
             salva_config(self.cfg)
+
+    # ---- scelta del programma da registrare ----
+    def _scena_app(self):
+        c = self.c
+        self._scena("app", 380, 520)
+        self.root.title(f"Cosa registrare · {APP}")
+        self._campo_bg(34, 126, 312, 220)
+        self._sfondo_pronto()
+
+        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._testo(34, 58, "Cosa registrare", FONT_T)
+        self._etichetta(34, 104, "Scegli un programma aperto, oppure tutto lo schermo")
+
+        self._app_elenco = [None] + elenca_app()
+        lb = tk.Listbox(self.cv, font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0, highlightthickness=0,
+                        selectbackground=c["acc2"], selectforeground="#ffffff", activestyle="none",
+                        exportselection=False)
+        sb = tk.Scrollbar(self.cv, command=lb.yview)
+        lb.config(yscrollcommand=sb.set)
+        self.cv.create_window(self._px(40), self._px(132), window=lb, anchor="nw", width=self._px(280), height=self._px(208))
+        self.cv.create_window(self._px(322), self._px(132), window=sb, anchor="nw", width=self._px(16), height=self._px(208))
+        self._widgets += [lb, sb]
+        sel = 0
+        for i, voce in enumerate(self._app_elenco):
+            if voce is None:
+                lb.insert("end", "Tutto lo schermo")
+            else:
+                exe, titolo = voce
+                titolo = titolo if len(titolo) <= 34 else titolo[:33] + "…"
+                lb.insert("end", f"{exe}  —  {titolo}")
+                if self.app_scelta and exe.lower() == self.app_scelta[0].lower():
+                    sel = i
+        lb.selection_set(sel)
+        lb.see(sel)
+        lb.bind("<Double-Button-1>", lambda _e: self._conferma_app())
+        self.lb_app = lb
+        self._bottone(34, 358, 140, 32, "Aggiorna elenco", self._scena_app, font=FONT)
+        self._bottone(34, 402, 312, 44, "Scegli", self._conferma_app, primario=True)
+        self._testo(34, 458, "Con un programma scelto vengono registrati solo i clic fatti sulle sue finestre e i "
+                             "tasti premuti mentre è in primo piano. Aprilo prima, poi premi «Aggiorna elenco».",
+                    FONT_S, c["mut"], width=312)
+        self.root.bind("<Return>", lambda _e: self._conferma_app())
+        self.root.bind("<Escape>", lambda _e: self._scena_avvio())
+
+    def _conferma_app(self):
+        if self.scena != "app":
+            return
+        sel = self.lb_app.curselection()
+        self.app_scelta = self._app_elenco[int(sel[0])] if sel else None
+        self._scena_avvio()
 
     # ---- impostazioni ----
     def _scena_impostazioni(self):
@@ -2248,6 +2456,9 @@ class App:
                              "Riprendi: continua a registrare nello stesso progetto, anche un altro giorno; "
                              "nella pagina compare una riga con la data.", FONT_S, c["mut"], width=312)
         self.t_msg = self._testo(34, 526, "", FONT_S, c["err"], width=312)
+        if self.app_scelta:
+            self.cv.itemconfig(self.t_msg, fill=c["mut"],
+                               text=f"Se riprendi, registrerai solo {self.app_scelta[0]} (lo cambi dalla schermata iniziale).")
         self.root.bind("<Return>", lambda _e: self._apri_selezionato())
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
@@ -2312,7 +2523,8 @@ class App:
             nome_modo = getattr(self, "var_modo", "Normale")
             if nome_modo not in self.cfg["modalita"]:
                 nome_modo = "Normale"
-        self.rec = Registratore(d, nome_modo, self.cfg["modalita"][nome_modo], self.cfg, esistente=dati)
+        self.rec = Registratore(d, nome_modo, self.cfg["modalita"][nome_modo], self.cfg, esistente=dati,
+                             app=self.app_scelta[0] if self.app_scelta else None)
         self.in_chiusura = False
         try:
             self.rec.avvia()
@@ -2341,7 +2553,8 @@ class App:
             return
 
         nome_modo = self.var_modo
-        self.rec = Registratore(cartella, nome_modo, self.cfg["modalita"][nome_modo], self.cfg)
+        self.rec = Registratore(cartella, nome_modo, self.cfg["modalita"][nome_modo], self.cfg,
+                             app=self.app_scelta[0] if self.app_scelta else None)
         self.in_chiusura = False
         try:
             self.rec.avvia()
@@ -2379,7 +2592,7 @@ class App:
         """Disegna l'icona del pulsante pausa (cambia tra pausa e riprendi)."""
         c = self.c
         self.cv.delete("ico_btn_p")
-        cx, cy = 130, 20
+        cx, cy = self.w - 60, 20
         tags = ("btn_p", "ico_btn_p")
         if self.rec and self.rec.paused:
             pts = [cx - 4, cy - 7, cx - 4, cy + 7, cx + 7, cy]
@@ -2389,9 +2602,11 @@ class App:
                 self.cv.create_rectangle(self._px(cx + dx), self._px(cy - 6), self._px(cx + dx + 3), self._px(cy + 6),
                                          fill=c["fg"], width=0, tags=tags)
 
-    def _scena_registrazione(self, prima_volta=False):
+    def _scena_registrazione(self, prima_volta=False, ridisegna=False):
         c = self.c
-        self._scena("rec", 190, 40, "alto_dx", senza_bordo=True)
+        larg = BARRA_LARGA if self.mostra_passi else BARRA_STRETTA
+        alt = 40 + (PASSI_ALTEZZA if self.mostra_passi else 0)
+        self._scena("rec", larg, alt, "rec_resta" if ridisegna else "alto_dx", senza_bordo=True)
         W, H = self._px(self.w), self._px(self.h)
         barra = (22, 31, 45) if self.tema == "scuro" else (241, 244, 250)
         self.base = Image.new("RGBA", (W, H), barra + (255,))
@@ -2401,20 +2616,27 @@ class App:
         self.dot = self.cv.create_oval(self._px(14), self._px(14), self._px(26), self._px(26), width=0, tags=("drag",))
         self.t_passi = self._testo(36, 20, "", FONT_SB, anchor="w")
         self.cv.addtag_withtag("drag", self.t_passi)
-        self._cerchio(130, 20, 28, "btn_p", self._toggle_pausa,
+        x_lista, x_pausa, x_fine = larg - 94, larg - 60, larg - 26
+        self._cerchio(x_lista, 20, 28, "btn_l", self._toggle_passi,
+                      lambda: "Nascondi i passi" if self.mostra_passi else "Ultimi passi")
+        self._icona_lista(x_lista, 20)
+        self._cerchio(x_pausa, 20, 28, "btn_p", self._toggle_pausa,
                       lambda: ("Riprendi" if self.rec and self.rec.paused else "Pausa")
                       + f" · {str(self.cfg.get('tasto_pausa', 'f10')).upper()}")
-        self._cerchio(164, 20, 28, "btn_f", self._ferma_e_chiedi,
+        self._cerchio(x_fine, 20, 28, "btn_f", self._ferma_e_chiedi,
                       lambda: f"Fine · {str(self.cfg.get('tasto_fine', 'f9')).upper()}")
-        self.cv.create_rectangle(self._px(159), self._px(15), self._px(169), self._px(25),
+        self.cv.create_rectangle(self._px(x_fine - 5), self._px(15), self._px(x_fine + 5), self._px(25),
                                  fill=c["rec"], width=0, tags=("btn_f",))
         self.cv.tag_bind("drag", "<Button-1>", self._drag_inizio)
         self.cv.tag_bind("drag", "<B1-Motion>", self._drag_muovi)
         self._ico_stato = None
+        self._firma_passi = None
         self.root.attributes("-topmost", True)
         self.root.update_idletasks()
         self._aggiorna_rec()
         self._aggiorna_own_rect()
+        if ridisegna:
+            return  # la barra era già a posto: non cambio la visibilità negli screenshot
         self.barra_nascosta = None
         self.rec.maschera_barra = False
         if self.cfg.get("nascondi_barra", True):
@@ -2425,6 +2647,62 @@ class App:
             self.rec.maschera_barra = not self.barra_nascosta
             if prima_volta:
                 _log.info("Barra nascosta dagli screenshot: %s", self.barra_nascosta)
+
+    def _icona_lista(self, cx, cy):
+        """Tre righette: il pulsante degli ultimi passi."""
+        for dy in (-5, 0, 5):
+            self.cv.create_rectangle(self._px(cx - 6), self._px(cy + dy - 1), self._px(cx + 6), self._px(cy + dy + 1),
+                                     fill=self.c["fg"], width=0, tags=("btn_l",))
+
+    def _toggle_passi(self):
+        if not self.rec or self.scena != "rec":
+            return
+        self.mostra_passi = not self.mostra_passi
+        self._scena_registrazione(ridisegna=True)
+
+    def _disegna_passi(self):
+        """Elenco degli ultimi passi sotto la barra (si aggiorna da solo quando ne arriva uno nuovo)."""
+        if not self.mostra_passi or self.scena != "rec" or not self.rec:
+            return
+        reali = [st for st in list(self.rec.steps) if st.get("tipo") != "ripresa"][-PASSI_RIGHE:]
+        firma = tuple((st.get("n"), st.get("testo"), st.get("az")) for st in reali)
+        if firma == self._firma_passi:
+            return
+        self._firma_passi = firma
+        c = self.c
+        self.cv.delete("lista")
+        x0, w_testo = 16, BARRA_LARGA - 32
+        y = 46
+
+        def nuovo(item):
+            self.cv.addtag_withtag("lista", item)
+            self.cv.addtag_withtag("drag", item)
+            return item
+
+        self.cv.create_line(self._px(14), self._px(40), self._px(self.w - 14), self._px(40), fill=c["linea"],
+                            tags=("lista", "drag"))
+        if self.rec.app:
+            nuovo(self._testo(x0, y, f"Solo {self.rec.app}", FONT_S, c["mut"]))
+            y += 16
+        if not reali:
+            nuovo(self._testo(x0, y + 4, "Ancora nessun passo", FONT_S, c["mut"]))
+            return
+        f1, f2 = tkfont.Font(font=FONT_SB), tkfont.Font(font=FONT_S)
+
+        def taglia(testo, font, larghezza):
+            if font.measure(testo) / self.k <= larghezza:
+                return testo
+            while testo and font.measure(testo + "…") / self.k > larghezza:
+                testo = testo[:-1]
+            return testo + "…"
+
+        for st in reversed(reali):  # il più recente in alto
+            col = _hex(AZIONI.get(st.get("az"), AZIONI["tasto"])[1])
+            nuovo(self.cv.create_oval(self._px(x0), self._px(y + 5), self._px(x0 + 8), self._px(y + 13),
+                                      fill=col, width=0))
+            nuovo(self._testo(x0 + 16, y, taglia(f"{st.get('n')}.  {st.get('testo', '')}", f1, w_testo - 16), FONT_SB))
+            nuovo(self._testo(x0 + 16, y + 16, taglia(st.get("finestra") or "", f2, w_testo - 16), FONT_S, c["mut"]))
+            y += PASSI_RIGA
 
     def _drag_inizio(self, e):
         self._dx, self._dy = e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y()
@@ -2456,6 +2734,7 @@ class App:
         if in_pausa != self._ico_stato:
             self._ico_stato = in_pausa
             self._icone_barra()
+        self._disegna_passi()
         self.root.title(f"{'Pausa' if in_pausa else 'REC'} · {self.rec.dir.name}")
 
     def _poll(self):
