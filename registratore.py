@@ -22,6 +22,7 @@ import re
 import shutil
 import sys
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -40,7 +41,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.6"
+VERSION = "1.8"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -129,6 +130,10 @@ CONFIG_DEFAULT = {
     "tema": "scuro",
     "nascondi_barra": True,
     "backup_massimo": 10,
+    "jpeg_motore": "standard",  # "standard" (Pillow) oppure "mozjpeg" (cjpeg incluso nell'exe)
+    "moz_qualita": 30,          # 10-90
+    "moz_scala": 100,           # 50-100 (% della dimensione dello schermo)
+    "moz_444": False,           # True = colori a piena risoluzione (bordi dei riquadri piu' netti)
 }
 
 
@@ -246,6 +251,93 @@ def opzioni_salvataggio(fmt: str, q: int) -> dict:
     return {"JPEG": {"quality": q, "optimize": True},
             "WEBP": {"quality": q, "method": 4},
             "PNG": {"optimize": True}}[fmt]
+
+
+# --------------------------------------------------------------------------
+# MozJPEG (cjpeg.exe incluso nell'exe): stessa qualità con file molto più piccoli
+
+CJPEG_REL = Path("tools") / "cjpeg.exe"
+CJPEG_TIMEOUT = 20
+
+
+def cjpeg_percorso():
+    """Percorso di cjpeg.exe se c'è (nell'exe o accanto allo script), altrimenti None."""
+    p = risorsa(str(CJPEG_REL))
+    return p if p.is_file() else None
+
+
+def _limita(v, a, b, default):
+    try:
+        return max(a, min(b, int(v)))
+    except (TypeError, ValueError):
+        return default
+
+
+def modalita_attive(cfg: dict) -> dict:
+    """Le modalità che si vedono nella schermata iniziale.
+    Standard: le quattro di sempre. MozJPEG: «Minima» (WEBP) e «MozJPEG», con qualità e dimensione scelte in Impostazioni."""
+    if cfg.get("jpeg_motore") != "mozjpeg":
+        return cfg["modalita"]
+    attive = {}
+    if "Minima" in cfg["modalita"]:
+        attive["Minima"] = cfg["modalita"]["Minima"]
+    attive["MozJPEG"] = {"formato": "MOZJPEG",
+                         "qualita": _limita(cfg.get("moz_qualita"), 10, 90, 30),
+                         "scala": _limita(cfg.get("moz_scala"), 50, 100, 100) / 100,
+                         "sub444": bool(cfg.get("moz_444", False))}
+    return attive
+
+
+def _jpeg_con_cjpeg(img, q: int, sub444: bool):
+    """Comprime con cjpeg (mozjpeg). Restituisce i byte del JPEG, oppure None se qualcosa va storto."""
+    exe = cjpeg_percorso()
+    if exe is None:
+        return None
+    tmp_in = tmp_out = None
+    try:
+        fd, tmp_in = tempfile.mkstemp(suffix=".bmp", prefix="reg_")
+        os.close(fd)
+        fd, tmp_out = tempfile.mkstemp(suffix=".jpg", prefix="reg_")
+        os.close(fd)
+        img.convert("RGB").save(tmp_in, format="BMP")
+        cmd = [str(exe), "-quality", str(q)]
+        if sub444:
+            cmd += ["-sample", "1x1"]
+        cmd += ["-outfile", tmp_out, tmp_in]
+        r = subprocess.run(cmd, capture_output=True, timeout=CJPEG_TIMEOUT,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode != 0:
+            _log.error("cjpeg ha restituito %s: %s", r.returncode, r.stderr[-300:])
+            return None
+        dati = Path(tmp_out).read_bytes()
+        if len(dati) < 4 or dati[:2] != b"\xff\xd8":
+            _log.error("cjpeg ha prodotto un file non valido")
+            return None
+        return dati
+    except Exception:
+        _log.exception("Errore con cjpeg")
+        return None
+    finally:
+        for t in (tmp_in, tmp_out):
+            if t:
+                try:
+                    os.unlink(t)
+                except OSError:
+                    pass
+
+
+def codifica_immagine(img, fmt: str, q: int, sub444: bool = False):
+    """Restituisce (byte, formato_usato). «MOZJPEG» usa cjpeg; se manca o fallisce si salva con Pillow
+    (JPEG), cosi' la registrazione non si rompe mai."""
+    if fmt == "MOZJPEG":
+        dati = _jpeg_con_cjpeg(img, q, sub444)
+        if dati is not None:
+            return dati, "MOZJPEG"
+        _log.warning("MozJPEG non disponibile: salvo con Pillow")
+        fmt, q = "JPEG", min(90, q + 15)  # a pari numero Pillow comprime peggio di mozjpeg
+    buf = io.BytesIO()
+    img.save(buf, format=fmt, **opzioni_salvataggio(fmt, q))
+    return buf.getvalue(), fmt
 
 
 def elenca_progetti(radice: Path) -> list:
@@ -982,8 +1074,9 @@ class Registratore:
 
         fmt = str(self.modo.get("formato", "JPEG")).upper()
         q = int(self.modo.get("qualita", 65))
-        ext = {"JPEG": ".jpg", "WEBP": ".webp", "PNG": ".png"}.get(fmt, ".jpg")
-        if fmt not in ("JPEG", "WEBP", "PNG"):
+        sub444 = bool(self.modo.get("sub444", False))
+        ext = {"JPEG": ".jpg", "MOZJPEG": ".jpg", "WEBP": ".webp", "PNG": ".png"}.get(fmt, ".jpg")
+        if fmt not in ("JPEG", "MOZJPEG", "WEBP", "PNG"):
             fmt = "JPEG"
 
         while True:
@@ -991,8 +1084,9 @@ class Registratore:
             path = self.dir / "immagini" / f"{self.contatore:04d}{ext}"
             if not path.exists():
                 break
+        dati, fmt_usato = codifica_immagine(img, fmt, q, sub444)  # prima comprimo, poi scrivo: niente file a meta'
         with open(path, "xb") as f:  # "x" = mai sovrascrivere
-            img.save(f, format=fmt, **opzioni_salvataggio(fmt, q))
+            f.write(dati)
 
         step = {
             "n": self.n_passi + 1,
@@ -1004,8 +1098,10 @@ class Registratore:
             "img": f"immagini/{path.name}",
         }
         self.steps.append(step)
-        self.ultimo_box = ({"step": step, "path": path, "fmt": fmt, "q": q, "box": box,
-                            "raggio": raggio, "spessore": spessore} if kind == "click" else None)
+        # Tengo in memoria l'immagine non ancora compressa: se arriva il secondo clic del doppio clic
+        # disegno il secondo riquadro su questa e comprimo una volta sola (niente doppia perdita di qualita').
+        self.ultimo_box = ({"step": step, "path": path, "fmt": fmt, "q": q, "sub444": sub444, "box": box,
+                            "raggio": raggio, "spessore": spessore, "img": img} if kind == "click" else None)
         self._salva_json()
         if self.n_passi % 5 == 0:
             self.scrivi_html()
@@ -1021,13 +1117,16 @@ class Registratore:
         s["az"] = "doppio"
         if info["box"]:
             try:
-                with Image.open(info["path"]) as im:
-                    img = im.convert("RGB")
+                img = info.get("img")
+                if img is None:  # riserva: riapro il file salvato
+                    with Image.open(info["path"]) as im:
+                        img = im.convert("RGB")
                 cx, cy = info["box"]
                 r = int(info["raggio"] * 1.55)
                 ImageDraw.Draw(img).rectangle([cx - r, cy - r, cx + r, cy + r],
                                               outline=AZIONI["doppio"][1], width=info["spessore"])
-                img.save(info["path"], format=info["fmt"], **opzioni_salvataggio(info["fmt"], info["q"]))
+                dati, _ = codifica_immagine(img, info["fmt"], info["q"], info.get("sub444", False))
+                Path(info["path"]).write_bytes(dati)
             except Exception as e:
                 self.errori.append(repr(e))
                 _log.exception("Errore nel disegnare il doppio clic")
@@ -1744,7 +1843,7 @@ Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo ne
 Se subito dopo un clic scorri con la rotellina, il riquadro non viene disegnato: la pagina si è spostata e finirebbe nel punto sbagliato.
 
 QUALITÀ DEGLI SCREENSHOT
-Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json, dove si trovano anche i tasti (tasto_pausa, tasto_fine) e la pausa che chiude un passo di testo (pausa_digitazione_sec).
+Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. In Impostazioni → «Compressione JPEG» puoi passare a MozJPEG: restano «Minima» e «MozJPEG», con due cursori (qualità e dimensione). Il testo piccolo resta leggibile con dimensione 100% e qualità bassa (30 circa), e il file pesa molto meno. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json, dove si trovano anche i tasti (tasto_pausa, tasto_fine) e la pausa che chiude un passo di testo (pausa_digitazione_sec).
 
 ANNULLARE UNA REGISTRAZIONE
 Dalla schermata di fine premi «Annulla registrazione»: il programma chiede conferma. Non cancella niente subito: la cartella va in «{CARTELLA_BACKUP}», dentro la cartella dei progetti, e la puoi recuperare riportandola fuori. Se ne tengono al massimo {BACKUP_MASSIMO} di base (il numero si cambia in Impostazioni): quando sono di più, vengono eliminate le più vecchie. Puoi svuotare la cartella a mano quando vuoi. Se c'è un errore mentre salvi, il programma fa una copia di sicurezza nella stessa cartella.
@@ -1753,7 +1852,7 @@ RIPRENDERE UN PROGETTO
 Da «Apri un progetto» scegli il progetto e premi «Riprendi»: la registrazione riparte nella stessa cartella, anche il giorno dopo o a progetto finito, e i nuovi passi si aggiungono in fondo. Nella pagina HTML compare una riga con il giorno e l'ora in cui hai ripreso. Se annulli subito, il progetto resta com'era.
 
 IMPOSTAZIONI
-Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML), se nascondere la barra del registratore dagli screenshot e quanti backup tenere.
+Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML), se nascondere la barra del registratore dagli screenshot, la compressione JPEG (Standard o MozJPEG) e quanti backup tenere.
 
 MODIFICARE UN PROGETTO
 Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (la prima volta soltanto: poi se la ricorda) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
@@ -2241,9 +2340,10 @@ class App:
 
         self._etichetta(34, 174, "Qualità degli screenshot")
         corrente = self.cfg["modalita_corrente"]
-        self.var_modo = corrente if corrente in self.cfg["modalita"] else "Normale"
+        attive = modalita_attive(self.cfg)
+        self.var_modo = corrente if corrente in attive else ("MozJPEG" if "MozJPEG" in attive else "Normale")
         self.t_desc = self._testo(34, 236, "", FONT_S, c["mut"])
-        self._sel_pill = self._pillole(34, 196, list(self.cfg["modalita"]), self.var_modo, self._sel_modo)
+        self._sel_pill = self._pillole(34, 196, list(attive), self.var_modo, self._sel_modo, w=96 if len(attive) <= 3 else 72)
         self._sel_modo(self.var_modo, salva=False)
 
         self._etichetta(34, 264, "Cosa registrare")
@@ -2276,9 +2376,10 @@ class App:
     def _sel_modo(self, nome, salva=True):
         self.var_modo = nome
         self._sel_pill(nome)
-        m = self.cfg["modalita"].get(nome, {})
+        m = modalita_attive(self.cfg).get(nome, {})
+        sub = " · 4:4:4" if m.get("sub444") else ""
         self.cv.itemconfig(self.t_desc, text=f"{m.get('formato', 'JPEG')} · qualità {m.get('qualita', 65)} · "
-                                             f"dimensione {int(float(m.get('scala', 1)) * 100)}%")
+                                             f"dimensione {int(float(m.get('scala', 1)) * 100)}%{sub}")
         if salva:
             self.cfg["modalita_corrente"] = nome
             salva_config(self.cfg)
@@ -2336,7 +2437,7 @@ class App:
     # ---- impostazioni ----
     def _scena_impostazioni(self):
         c = self.c
-        self._scena("impostazioni", 380, 520)
+        self._scena("impostazioni", 380, 582)
         self.root.title(f"Impostazioni · {APP}")
         self._sfondo_pronto()
 
@@ -2355,13 +2456,118 @@ class App:
                       self._imposta_barra, w=96)
         self._testo(34, 366, "Funziona su Windows 10 (2004 o successivi) e Windows 11.", FONT_S, c["mut"], width=312)
 
+        self._etichetta(34, 412, "Compressione JPEG")
+        if self.cfg.get("jpeg_motore") == "mozjpeg":
+            m = modalita_attive(self.cfg)["MozJPEG"]
+            riassunto = f"MozJPEG · qualità {m['qualita']} · {int(m['scala'] * 100)}%   ›"
+        else:
+            riassunto = "Standard   ›"
+        self._bottone(34, 434, 312, 36, riassunto, self._scena_compressione, font=FONT)
+
         massimo = str(int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
         opzioni = ["5", "10", "20", "50"]
-        self._etichetta(34, 412, "Backup cancellati: quanti tenerne")
-        self._pillole(34, 434, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup, w=72)
-        self._testo(34, 474, f"Le registrazioni annullate vanno nella cartella «{CARTELLA_BACKUP}»; "
+        self._etichetta(34, 488, "Backup cancellati: quanti tenerne")
+        self._pillole(34, 510, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup, w=72)
+        self._testo(34, 550, f"Le registrazioni annullate vanno nella cartella «{CARTELLA_BACKUP}»; "
                              "oltre questo numero si elimina la più vecchia.", FONT_S, c["mut"], width=312)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
+
+    # ---- compressione JPEG (Standard / MozJPEG) ----
+    def _cursore(self, x, y, w, vmin, vmax, valore, step, al_cambio, al_rilascio):
+        """Cursore trascinabile disegnato sul canvas. al_cambio(v) durante il trascinamento, al_rilascio(v) alla fine."""
+        c = self.c
+        px = self._px
+        cy = px(y + 10)
+        x0, x1 = px(x), px(x + w)
+        r = px(9)
+        traccia = self.cv.create_line(x0, cy, x1, cy, width=px(8), fill=c["linea"], capstyle="round")
+        piena = self.cv.create_line(x0, cy, x0, cy, width=px(8), fill=c["acc1"], capstyle="round")
+        pallino = self.cv.create_oval(0, 0, 1, 1, fill=c["acc1"], outline=c["acc_fg"], width=px(2))
+        stato = {"v": valore}
+
+        def disegna(v):
+            xv = x0 + (v - vmin) / (vmax - vmin) * (x1 - x0)
+            self.cv.coords(piena, x0, cy, xv, cy)
+            self.cv.coords(pallino, xv - r, cy - r, xv + r, cy + r)
+
+        def da_evento(e):
+            v = vmin + (e.x - x0) / max(1, (x1 - x0)) * (vmax - vmin)
+            v = int(round(v / step) * step)
+            v = max(vmin, min(vmax, v))
+            if v != stato["v"]:
+                stato["v"] = v
+                disegna(v)
+                al_cambio(v)
+
+        def rilascia(_e):
+            al_rilascio(stato["v"])
+
+        for o in (traccia, piena, pallino):
+            self.cv.tag_bind(o, "<Button-1>", da_evento)
+            self.cv.tag_bind(o, "<B1-Motion>", da_evento)
+            self.cv.tag_bind(o, "<ButtonRelease-1>", rilascia)
+            self.cv.tag_bind(o, "<Enter>", lambda _e: self.cv.config(cursor="hand2"))
+            self.cv.tag_bind(o, "<Leave>", lambda _e: self.cv.config(cursor=""))
+        disegna(valore)
+
+    def _scena_compressione(self):
+        c = self.c
+        moz = self.cfg.get("jpeg_motore") == "mozjpeg"
+        self._scena("compressione", 380, 520)
+        self.root.title(f"Compressione JPEG · {APP}")
+        self._sfondo_pronto()
+        self._link(34, 24, "‹  Indietro", self._scena_impostazioni, font=FONT)
+        self._testo(34, 58, "Compressione JPEG", FONT_T)
+
+        self._etichetta(34, 104, "Metodo")
+        self._pillole(34, 126, ["Standard", "MozJPEG"], "MozJPEG" if moz else "Standard",
+                      self._imposta_motore, w=120)
+        if not moz:
+            self._testo(34, 176, "Standard usa Pillow, come nelle versioni precedenti. Con MozJPEG a parità di "
+                                 "leggibilità le immagini pesano molto meno: nella schermata iniziale restano «Minima» "
+                                 "e «MozJPEG», con la qualità e la dimensione che scegli qui.",
+                        FONT_S, c["mut"], width=312)
+            self.root.bind("<Escape>", lambda _e: self._scena_impostazioni())
+            return
+
+        q = _limita(self.cfg.get("moz_qualita"), 10, 90, 30)
+        sc = _limita(self.cfg.get("moz_scala"), 50, 100, 100)
+        t_q = self._testo(34, 176, f"Qualità: {q}", FONT)
+        self._cursore(34, 200, 312, 10, 90, q, 5,
+                      lambda v: self.cv.itemconfig(t_q, text=f"Qualità: {v}"),
+                      lambda v: self._salva_moz("moz_qualita", v))
+        t_s = self._testo(34, 244, f"Dimensione: {sc}%", FONT)
+        self._cursore(34, 268, 312, 50, 100, sc, 5,
+                      lambda v: self.cv.itemconfig(t_s, text=f"Dimensione: {v}%"),
+                      lambda v: self._salva_moz("moz_scala", v))
+
+        self._etichetta(34, 312, "Colori")
+        self._pillole(34, 334, ["4:2:0", "4:4:4"], "4:4:4" if self.cfg.get("moz_444") else "4:2:0",
+                      self._imposta_444, w=96)
+        self._testo(34, 378, "Per il testo piccolo conviene dimensione 100% e qualità bassa (30 circa): il "
+                             "ridimensionamento sfoca le lettere più della compressione. «4:4:4» tiene netti i "
+                             "bordi colorati dei riquadri e pesa poco di più.", FONT_S, c["mut"], width=312)
+        if cjpeg_percorso() is None:
+            self._testo(34, 458, "MozJPEG non è incluso in questa copia del programma: si userà il metodo "
+                                 "standard.", FONT_S, c["err"], width=312)
+        self.root.bind("<Escape>", lambda _e: self._scena_impostazioni())
+
+    def _salva_moz(self, chiave, valore):
+        self.cfg[chiave] = int(valore)
+        salva_config(self.cfg)
+
+    def _imposta_motore(self, nome):
+        self.cfg["jpeg_motore"] = "mozjpeg" if nome == "MozJPEG" else "standard"
+        attive = modalita_attive(self.cfg)
+        if self.cfg.get("modalita_corrente") not in attive:  # es. era «Normale» e ora c'è solo Minima/MozJPEG
+            self.cfg["modalita_corrente"] = "MozJPEG" if "MozJPEG" in attive else "Normale"
+        salva_config(self.cfg)
+        self._scena_compressione()
+
+    def _imposta_444(self, nome):
+        self.cfg["moz_444"] = nome == "4:4:4"
+        salva_config(self.cfg)
+        self._scena_compressione()
 
     def _imposta_tema(self, nome):
         global TEMA_HTML
@@ -2519,11 +2725,12 @@ class App:
             self._msg(f"Non riesco a leggere il progetto: {e}", ok=False)
             return
         nome_modo = dati.get("modalita")
-        if nome_modo not in self.cfg["modalita"]:
+        attive = modalita_attive(self.cfg)
+        if nome_modo not in attive:  # es. progetto fatto in «Normale» ma ora c'è MozJPEG (o viceversa)
             nome_modo = getattr(self, "var_modo", "Normale")
-            if nome_modo not in self.cfg["modalita"]:
-                nome_modo = "Normale"
-        self.rec = Registratore(d, nome_modo, self.cfg["modalita"][nome_modo], self.cfg, esistente=dati,
+            if nome_modo not in attive:
+                nome_modo = next(iter(attive))
+        self.rec = Registratore(d, nome_modo, attive[nome_modo], self.cfg, esistente=dati,
                              app=self.app_scelta[0] if self.app_scelta else None)
         self.in_chiusura = False
         try:
@@ -2553,7 +2760,7 @@ class App:
             return
 
         nome_modo = self.var_modo
-        self.rec = Registratore(cartella, nome_modo, self.cfg["modalita"][nome_modo], self.cfg,
+        self.rec = Registratore(cartella, nome_modo, modalita_attive(self.cfg)[nome_modo], self.cfg,
                              app=self.app_scelta[0] if self.app_scelta else None)
         self.in_chiusura = False
         try:

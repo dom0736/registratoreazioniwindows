@@ -14,6 +14,7 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 - **Ultimi passi**: il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi registrati, aggiornato in tempo reale.
 - Il testo digitato viene raggruppato: una riga di comando = un passo, non uno per lettera.
 - Quattro qualità (Minima, Leggera, Normale, Nitida) per tenere leggere le immagini.
+- **MozJPEG** (da Impostazioni → Compressione JPEG): file molto più piccoli a parità di leggibilità, con due cursori per qualità e dimensione. Se `cjpeg` non c'è o fallisce, si salva con il metodo standard: la registrazione non si rompe mai.
 - Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
 - **Stampa e salva** (icona della stampante o Ctrl+P): anteprima impaginata, scelta dei passi da includere, formato A4/Letter, verticale/orizzontale, margini, passi per pagina, cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco). Poi «Stampa / Salva PDF…» apre la finestra di stampa del browser: scegliendo «Salva come PDF» ottieni il PDF. Si può anche scaricare l'elenco dei passi in Markdown.
 - **Modifica dalla pagina HTML**: clicchi sul titolo o su una descrizione, scrivi e premi **Salva copia**: nasce la cartella `nome_modificato` accanto all'originale, che non cambia. Il browser chiede una volta di scegliere la cartella che contiene il progetto (serve Edge o Chrome).
@@ -41,13 +42,15 @@ In locale, con Python 3.12:
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." registratore.py
+pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." --add-data "tools/cjpeg.exe;tools" registratore.py
 ```
 
 ## Impostazioni
 Cartella dei progetti, tema e nascondere la barra dagli screenshot si cambiano da **Impostazioni** dentro il programma.
 Il file `%APPDATA%\RegistratoreAzioni\config.json` contiene anche le qualità, i tasti (`tasto_pausa`, `tasto_fine`),
-la pausa che chiude un passo di testo (`pausa_digitazione_sec`), `registra_testo_digitato`, `nascondi_barra` e il tema.
+la pausa che chiude un passo di testo (`pausa_digitazione_sec`), `registra_testo_digitato`, `nascondi_barra`, il tema e la compressione (`jpeg_motore`, `moz_qualita`, `moz_scala`, `moz_444`).
+
+`tools/cjpeg.exe` è MozJPEG 4.1.1 compilato dal sorgente ufficiale ([mozilla/mozjpeg](https://github.com/mozilla/mozjpeg)).
 
 ## Privacy
 Il programma registra tutto quello che fai e scrivi mentre è in funzione, password comprese: usa la pausa quando serve.
