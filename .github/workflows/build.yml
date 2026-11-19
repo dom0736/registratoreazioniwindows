@@ -27,6 +27,14 @@ jobs:
         shell: pwsh
         run: |
           $opts = @("--onefile", "--windowed", "--name", "RegistratoreAzioni", "--collect-submodules", "pynput", "--add-data", "marchio_registratore.txt;.")
+          # MozJPEG: cjpeg.exe (compilato dal sorgente ufficiale mozilla/mozjpeg) incluso nell'exe
+          if (Test-Path tools/cjpeg.exe) {
+            $opts += @("--add-data", "tools/cjpeg.exe;tools")
+            & tools/cjpeg.exe -version 2>&1 | Write-Host
+            (Get-FileHash tools/cjpeg.exe -Algorithm SHA256).Hash | ForEach-Object { Write-Host "cjpeg.exe SHA256: $_" }
+          } else {
+            Write-Host "tools/cjpeg.exe non trovato: l'exe usera' solo la compressione standard"
+          }
           if (Test-Path icon.png) {
             python crea_icona.py icon.png icon.ico
             $opts += @("--icon", "icon.ico", "--add-data", "icon.png;.")
