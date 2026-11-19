@@ -25,7 +25,7 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 
 ## Uso
 Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
-**F10** mette in pausa, **F9** finisce e salva. Il pulsante **Guida** dentro il programma spiega tutto il resto.
+**F10** mette in pausa, **F9** finisce e salva. Il pulsante **Guida** (o **F1**, prima di avviare la registrazione) apre nel browser la guida completa (`guida.html`).
 
 ## Scaricare l'exe
 1. Vai su **Releases** (colonna a destra del repository) e scarica `RegistratoreAzioni.exe` dell'ultima versione.
@@ -35,6 +35,7 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
 Per usare un'icona personalizzata basta aggiungere un `icon.png` quadrato (512×512 va benissimo, anche più grande) nella radice del repository.
+Il file `guida.html` è la guida aperta dal pulsante Guida / F1: tienilo nel repository.
 Il file `marchio_registratore.txt` serve alla pulizia automatica delle cartelle temporanee: tienilo nel repository.
 Gli angoli vengono arrotondati in automatico per l'exe, la finestra e la pagina HTML. I colori dell'interfaccia seguono l'icona (grigio-blu, blu→magenta, pallino rosso). Senza `icon.png` il programma usa un'icona di riserva.
 
@@ -42,7 +43,7 @@ In locale, con Python 3.12:
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." --add-data "tools/cjpeg.exe;tools" registratore.py
+pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." --add-data "guida.html;." --add-data "tools/cjpeg.exe;tools" registratore.py
 ```
 
 ## Impostazioni

@@ -41,7 +41,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.8"
+VERSION = "1.9"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -1819,81 +1819,18 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
 # --------------------------------------------------------------------------
 # Guida e report per le segnalazioni
 # --------------------------------------------------------------------------
-GUIDA = f"""COME SI USA
-1. Scrivi il nome del progetto e premi «Avvia registrazione». I progetti vengono salvati nella cartella indicata in Impostazioni (la puoi cambiare quando vuoi).
-2. Lavora normalmente. A ogni clic, trascinamento o azione da tastiera viene salvato uno screenshot con un riquadro colorato. La rotellina del mouse non conta.
-3. Quando scrivi, il testo viene raggruppato: un passo per riga (per esempio «show ip route» + Invio), non uno per lettera.
-4. F10 = pausa / riprendi.  F9 = fine. Puoi usare anche i pulsanti rotondi della barretta in alto a destra (ultimi passi, pausa e fine); si sposta trascinandola. Il pallino è rosso mentre registri, arancione in pausa.
-5. Con «Fine» la registrazione si ferma ma non è ancora salvata: scrivi il nome del progetto e premi «Salva e apri» (si apre la pagina HTML), oppure «Riprendi registrazione» per continuare da dove eri, oppure «Annulla registrazione» (chiede conferma). Anche chiudere la barretta (Alt+F4) porta a questa schermata.
+GUIDA_FILE = "guida.html"
 
-REGISTRARE SOLO UN PROGRAMMA
-Nella schermata iniziale, sotto «Cosa registrare», puoi scegliere un programma tra quelli aperti (apri prima il programma, poi premi «Aggiorna elenco»). Da quel momento vengono registrati solo i clic fatti sulle finestre di quel programma e i tasti premuti mentre è in primo piano: clic e tasti su altri programmi, o sul desktop, vengono ignorati. Lo screenshot resta comunque dell'intero schermo. La scelta vale per questa sessione: al prossimo avvio si torna a «Tutto lo schermo».
 
-GLI ULTIMI PASSI
-Il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi (il più recente in alto, con il colore dell'azione e la finestra in cui è avvenuto); si aggiorna da solo mentre registri. Premilo di nuovo per richiuderlo. L'elenco non compare negli screenshot.
-
-I COLORI DEI RIQUADRI
-Ogni tipo di azione ha il suo colore negli screenshot (e sul numero del passo nella pagina HTML):
-• Rosso = clic sinistro
-• Blu = clic destro
-• Verde = clic centrale
-• Viola = doppio clic (due riquadri, uno dentro l'altro)
-• Arancione = trascinamento (dal quadratino piccolo al riquadro grande)
-• Verde acqua = tastiera (colore del numero del passo; lo screenshot resta pulito, senza cornice)
-Se subito dopo un clic scorri con la rotellina, il riquadro non viene disegnato: la pagina si è spostata e finirebbe nel punto sbagliato.
-
-QUALITÀ DEGLI SCREENSHOT
-Minima, Leggera, Normale, Nitida: più sono leggere, meno spazio occupano. «Normale» va bene quasi sempre. In Impostazioni → «Compressione JPEG» puoi passare a MozJPEG: restano «Minima» e «MozJPEG», con due cursori (qualità e dimensione). Il testo piccolo resta leggibile con dimensione 100% e qualità bassa (30 circa), e il file pesa molto meno. Le modalità si possono cambiare in %APPDATA%\\RegistratoreAzioni\\config.json, dove si trovano anche i tasti (tasto_pausa, tasto_fine) e la pausa che chiude un passo di testo (pausa_digitazione_sec).
-
-ANNULLARE UNA REGISTRAZIONE
-Dalla schermata di fine premi «Annulla registrazione»: il programma chiede conferma. Non cancella niente subito: la cartella va in «{CARTELLA_BACKUP}», dentro la cartella dei progetti, e la puoi recuperare riportandola fuori. Se ne tengono al massimo {BACKUP_MASSIMO} di base (il numero si cambia in Impostazioni): quando sono di più, vengono eliminate le più vecchie. Puoi svuotare la cartella a mano quando vuoi. Se c'è un errore mentre salvi, il programma fa una copia di sicurezza nella stessa cartella.
-
-RIPRENDERE UN PROGETTO
-Da «Apri un progetto» scegli il progetto e premi «Riprendi»: la registrazione riparte nella stessa cartella, anche il giorno dopo o a progetto finito, e i nuovi passi si aggiungono in fondo. Nella pagina HTML compare una riga con il giorno e l'ora in cui hai ripreso. Se annulli subito, il progetto resta com'era.
-
-IMPOSTAZIONI
-Cartella dei progetti, tema scuro o chiaro (vale anche per le pagine HTML), se nascondere la barra del registratore dagli screenshot, la compressione JPEG (Standard o MozJPEG) e quanti backup tenere.
-
-MODIFICARE UN PROGETTO
-Si fa dalla pagina HTML. Aprila con «Apri un progetto» (o con doppio clic su index.html), poi clicca sul titolo o su una descrizione e scrivi: in basso compare «Salva copia». Il browser chiede una volta di scegliere la cartella che CONTIENE il progetto (la prima volta soltanto: poi se la ricorda) e di consentire le modifiche. Viene creata «nomeprogetto_modificato» accanto all'originale, con immagini, pagina e dati; l'originale non viene toccato. Serve Microsoft Edge o Google Chrome.
-
-LA PAGINA HTML
-• Clic su un'immagine: si apre nel lettore (frecce ← → per scorrere, Esc per chiudere, clic per ingrandire). La freccetta in alto a destra la apre da sola in una nuova scheda.
-• Per modificare: clic sul titolo o su una descrizione, Invio conferma, Esc annulla quel testo; il pulsante «Annulla» in basso scarta tutte le modifiche non salvate.
-• Sole/luna cambia tema (la scelta resta nel browser).
-• L'icona della stampante (o Ctrl+P) apre «Stampa e salva».
-
-STAMPA E SALVA IN PDF
-Si apre un pannello con l'anteprima delle pagine, che si aggiorna a ogni scelta:
-• Passi da includere: togli la spunta a quelli che non vuoi (Tutti / Nessuno).
-• Pagina: A4 o Letter, verticale o orizzontale, margini stretti, normali o larghi.
-• Disposizione: quanti passi per pagina (Auto, 1, 2, 3 o 4) e la dimensione delle immagini.
-• Contenuto: titolo e data, descrizioni, ora e finestra, screenshot, numero di pagina, sfondo bianco (risparmia inchiostro) oppure i colori della pagina.
-• «Stampa / Salva PDF…» apre la finestra di stampa vera e propria: per ottenere un PDF scegli «Salva come PDF» (o «Microsoft Print to PDF») al posto della stampante. Il file PDF prende il nome del titolo.
-• «Salva elenco (.md)» scarica l'elenco dei passi scelti in testo (Markdown); i link alle immagini sono relativi, quindi salvalo dentro la cartella del progetto.
-Le scelte restano memorizzate nel browser. Per PowerPoint o Word: salva prima il PDF e aprilo con il programma che vuoi.
-
-COSA VIENE CREATO
-Nella cartella del progetto: index.html (la pagina), passi.json (i dati) e immagini/ (gli screenshot). Una copia modificata contiene le stesse cose; in passi.json le descrizioni cambiate conservano anche il testo originale. Non viene mai sovrascritto nulla: se un nome esiste già, il programma aggiunge _2, _3…
-In %APPDATA%\\RegistratoreAzioni ci sono solo config.json e log.txt (il log è limitato a poche centinaia di KB).
-
-NIENTE FILE IN GIRO
-Il programma non lascia resti che crescono nel tempo: i file temporanei di una chiusura anomala vengono tolti al prossimo avvio (compresa la cartella _MEI dell'exe dentro Temp, se più vecchia di un giorno), i backup dei progetti annullati hanno un limite, i vecchi report di «Segnala un problema» sul Desktop sono eliminati dopo 14 giorni e una «Salva copia» interrotta dal browser non lascia cartelle a metà.
-
-COSE DA SAPERE
-• Tutto quello che scrivi e vedi finisce nel progetto, password comprese: metti in pausa quando entri in account personali.
-• Le scorciatoie (Ctrl+S, Alt+Tab, Win+D…) sono un passo ciascuna; un tasto tenuto premuto conta una volta sola.
-• Se in config.json metti registra_testo_digitato a false, al posto delle lettere viene salvato solo un pallino (utile per le password).
-• Il programma si apre una volta sola: se lo riavvii, riporta in primo piano quello già aperto.
-• Un programma aperto come amministratore potrebbe non essere registrato.
-• Con «Solo un programma», le app del Microsoft Store (Calcolatrice, Impostazioni…) risultano tutte come ApplicationFrameHost.exe: scegliendola si registrano tutte insieme.
-• Viene catturato solo il monitor dove si trova il mouse.
-• La barretta del registratore viene nascosta dagli screenshot; se Windows non lo permette, il programma la copre con un riquadro scuro. Si può disattivare in Impostazioni.
-
-OPEN SOURCE E SEGNALAZIONI
-Registratore Azioni {VERSION} è open source e mi fa piacere che giri: più persone lo provano, più errori si trovano. Se qualcosa non funziona o hai un'idea per migliorarlo, scrivimi a {EMAIL}.
-Con «Segnala un problema» il programma crea un file di report con i dati tecnici utili per sistemare l'errore (versione, Windows, schermi, impostazioni ed errori registrati). Non contiene screenshot né il testo digitato. Leggilo prima di inviarlo e allegalo alla mail, insieme a due righe su cosa stavi facendo.
-"""
+def apri_guida() -> bool:
+    """Apre la guida (pagina HTML inclusa nell'exe) nel browser predefinito."""
+    try:
+        f = risorsa(GUIDA_FILE)
+        if not f.is_file():
+            return False
+        return bool(webbrowser.open(f.as_uri()))
+    except Exception:
+        return False
 
 
 def _anonimizza(testo: str) -> str:
@@ -2099,6 +2036,7 @@ class App:
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self._chiudi)
         self.root.report_callback_exception = self._errore_tk
+        self.root.bind("<F1>", self._guida)  # solo se la finestra ha il focus; ignorato durante la registrazione
         try:  # schermi HiDPI: i pixel del disegno seguono la scala di Windows
             self.k = max(1.0, float(self.root.winfo_fpixels("1i")) / 96.0)
         except Exception:
@@ -2364,7 +2302,7 @@ class App:
         y_linea = y_msg + 14 * righe + 10
         self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
         x = 34
-        for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._scena_guida),
+        for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._guida),
                            ("Segnala un problema", self._segnala)):
             self._link(x, y_linea + 12, testo, cmd)
             x += tkfont.Font(font=FONT_S).measure(testo) / self.k + 18
@@ -2596,33 +2534,15 @@ class App:
             salva_config(self.cfg)
             self.cv.itemconfig(self.t_root, text=self.cfg["cartella_radice"])
 
-    # ---- guida (nella stessa finestra) ----
-    def _scena_guida(self):
-        c = self.c
-        self._scena("guida", 540, 590)
-        self.root.title(f"Guida · {APP}")
-        self._campo_bg(30, 70, 480, 432)
-        self._sfondo_pronto()
-
-        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._testo(506, 24, "Guida", FONT_T, anchor="ne")
-
-        t = tk.Text(self.cv, wrap="word", font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0,
-                    padx=14, pady=10, spacing1=2, spacing3=4, highlightthickness=0, insertbackground=c["campo"])
-        sb = tk.Scrollbar(self.cv, command=t.yview)
-        t.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(34), self._px(74), window=t, anchor="nw", width=self._px(456), height=self._px(424))
-        self.cv.create_window(self._px(490), self._px(74), window=sb, anchor="nw", width=self._px(16), height=self._px(424))
-        self._widgets += [t, sb]
-        t.tag_configure("titolo", font=FONT_B, foreground=c["acc1"], spacing1=12)
-        for riga in GUIDA.strip().splitlines():
-            if riga and riga == riga.upper() and not riga.startswith(("•", "F10")):
-                t.insert("end", riga + "\n", "titolo")
-            else:
-                t.insert("end", riga + "\n")
-        t.config(state="disabled")
-        self._bottone(34, 520, 472, 44, "Ho capito", self._scena_avvio, primario=True)
-        self.root.bind("<Escape>", lambda _e: self._scena_avvio())
+    # ---- guida (si apre nel browser; F1 solo prima della registrazione) ----
+    def _guida(self, _e=None):
+        if self.rec is not None or self.scena == "rec":
+            return
+        if not apri_guida():
+            try:
+                self._msg("Non riesco ad aprire la guida nel browser.", False)
+            except Exception:
+                pass
 
     # ---- apri un progetto (la modifica si fa dalla pagina HTML) ----
     def _scena_progetti(self):
