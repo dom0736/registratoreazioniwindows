@@ -41,7 +41,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.9"
+VERSION = "1.9.1"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -364,18 +364,169 @@ def data_estesa(dt) -> str:
     return f"{_GIORNI[dt.weekday()]} {dt.day} {_MESI[dt.month - 1]} {dt.year}"
 
 
-def pota_backup(bk: Path, massimo: int, tieni=None) -> None:
-    """Tiene al massimo `massimo` voci nel backup: elimina le più vecchie."""
-    massimo = max(1, int(massimo))
+INDICE_BACKUP = "indice.json"
+MOTIVI_BACKUP = {"annullata": "Annullata", "ripresa-annullata": "Ripresa annullata", "errore": "Copia di sicurezza"}
+_RE_BACKUP = re.compile(r"^(?P<nome>.+?)__(?P<motivo>[a-z-]+)_(?P<data>\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_\d+)?$")
+
+
+def dimensione_cartella(d: Path) -> int:
+    tot = 0
+    for radice, _cartelle, files in os.walk(d):
+        for f in files:
+            try:
+                tot += os.path.getsize(os.path.join(radice, f))
+            except OSError:
+                pass
+    return tot
+
+
+def formatta_dim(n: int) -> str:
+    if n < 1024 * 1024:
+        return f"{max(1, round(n / 1024))} KB" if n else "0 KB"
+    if n < 1024 ** 3:
+        return f"{n / 1024 ** 2:.1f} MB".replace(".", ",")
+    return f"{n / 1024 ** 3:.2f} GB".replace(".", ",")
+
+
+def data_breve(iso: str) -> str:
     try:
-        voci = [d for d in Path(bk).iterdir() if d.is_dir()]
-        voci.sort(key=lambda d: d.stat().st_mtime)
+        dt = datetime.datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return "data sconosciuta"
+    mese = _MESI[dt.month - 1][:3]
+    anno = f" {dt.year}" if dt.year != datetime.datetime.now().year else ""
+    return f"{dt.day} {mese}{anno} {dt:%H:%M}"
+
+
+def _voce_backup(d: Path) -> dict:
+    """Riga dell'indice per una cartella di backup (nome, motivo e data si leggono dal nome della cartella)."""
+    nome, motivo, quando = d.name, "", None
+    m = _RE_BACKUP.match(d.name)
+    if m:
+        nome, motivo = m.group("nome"), m.group("motivo")
+        try:
+            quando = datetime.datetime.strptime(m.group("data"), "%Y-%m-%d_%H-%M-%S")
+        except ValueError:
+            quando = None
+    if quando is None:
+        try:
+            quando = datetime.datetime.fromtimestamp(d.stat().st_mtime)
+        except OSError:
+            quando = datetime.datetime.now()
+    titolo, passi = "", 0
+    try:
+        dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
+        titolo = str(dati.get("titolo") or "")
+        passi = sum(1 for st in dati.get("passi", []) if st.get("tipo") != "ripresa")
+    except Exception:
+        pass
+    return {"cartella": d.name, "progetto": nome, "titolo": titolo or nome, "motivo": motivo,
+            "data": quando.isoformat(timespec="seconds"), "passi": passi, "byte": dimensione_cartella(d)}
+
+
+def _crea_pagina(d: Path) -> None:
+    """Scrive l'index.html in una cartella che ha un passi.json ma non la pagina (succede con le riprese annullate)."""
+    try:
+        dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
+        genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []), dati.get("modalita", ""), dati.get("creato", ""))
+    except Exception:
+        _log.exception("Impossibile creare la pagina del backup")
+
+
+def leggi_indice(bk: Path) -> list:
+    try:
+        dati = json.loads((Path(bk) / INDICE_BACKUP).read_text(encoding="utf-8"))
+        return [v for v in dati.get("backup", []) if isinstance(v, dict) and v.get("cartella")]
+    except Exception:
+        return []
+
+
+def sincronizza_indice(bk: Path) -> list:
+    """Allinea l'indice (indice.json) alle cartelle che ci sono davvero: aggiunge quelle nuove (anche i backup
+    vecchi, fatti prima dell'indice), toglie quelle sparite. Restituisce le voci, dalla più recente."""
+    bk = Path(bk)
+    try:
+        cartelle = {d.name: d for d in bk.iterdir() if d.is_dir()}
     except OSError:
-        return
-    for d in voci[:max(0, len(voci) - massimo)]:
+        return []
+    vecchie = {v["cartella"]: v for v in leggi_indice(bk)}
+    voci = []
+    cambiato = any(n not in cartelle for n in vecchie)
+    for nome, d in cartelle.items():
+        v = vecchie.get(nome)
+        if v is None:
+            cambiato = True
+            v = _voce_backup(d)
+            if (d / "passi.json").is_file() and not (d / "index.html").is_file():
+                _crea_pagina(d)
+        voci.append(v)
+    voci.sort(key=lambda v: str(v.get("data", "")), reverse=True)
+    if cambiato or not (bk / INDICE_BACKUP).is_file():
+        try:
+            scrivi_json_atomico(bk / INDICE_BACKUP, {"versione": 1, "backup": voci})
+        except OSError:
+            _log.exception("Impossibile scrivere l'indice dei backup")
+    return voci
+
+
+def pota_backup(bk: Path, massimo: int, tieni=None) -> None:
+    """Tiene al massimo `massimo` voci nel backup: elimina le più vecchie (secondo la data nell'indice)."""
+    massimo = max(1, int(massimo))
+    bk = Path(bk)
+    for v in sincronizza_indice(bk)[massimo:]:
+        d = bk / v["cartella"]
         if tieni is not None and d == tieni:
             continue
         shutil.rmtree(d, ignore_errors=True)
+    sincronizza_indice(bk)
+
+
+def _cartella_backup(bk: Path, nome: str) -> Path:
+    d = Path(bk) / nome
+    if not nome or Path(nome).name != nome or not d.is_dir():
+        raise ValueError("il backup non esiste più")
+    return d
+
+
+def ripristina_backup(bk: Path, nome: str, radice: Path) -> Path:
+    """Rimette un backup tra i progetti (con lo stesso nome, o _2, _3… se esiste già) e lo toglie dal backup."""
+    bk = Path(bk)
+    src = _cartella_backup(bk, nome)
+    voce = next((v for v in sincronizza_indice(bk) if v["cartella"] == nome), None) or _voce_backup(src)
+    base = pulisci_nome(voce.get("progetto") or "") or "progetto"
+    parziale = voce.get("motivo") == "ripresa-annullata"
+    if parziale:
+        base += "_ripresa"
+    Path(radice).mkdir(parents=True, exist_ok=True)
+    dest = unique_path(Path(radice) / base)
+    try:
+        os.rename(src, dest)
+    except OSError:
+        shutil.copytree(src, dest)
+        shutil.rmtree(src, ignore_errors=True)
+    try:
+        dati = json.loads((dest / "passi.json").read_text(encoding="utf-8"))
+        dati["progetto"] = dest.name
+        if parziale:
+            dati["titolo"] = f"{dati.get('titolo') or dest.name} (passi di una ripresa annullata)"
+        scrivi_json_atomico(dest / "passi.json", dati)
+        genera_html(dest, dati.get("titolo") or dest.name, dati.get("passi", []),
+                    dati.get("modalita", ""), dati.get("creato", ""))
+    except Exception:
+        _log.exception("Backup ripristinato ma non sono riuscito ad aggiornare la pagina")
+    try:
+        os.utime(dest, None)  # appare in cima all'elenco dei progetti
+    except OSError:
+        pass
+    sincronizza_indice(bk)
+    return dest
+
+
+def elimina_backup(bk: Path, nome: str) -> None:
+    """Elimina per sempre una cartella di backup (non va nel Cestino)."""
+    d = _cartella_backup(bk, nome)
+    shutil.rmtree(d)
+    sincronizza_indice(bk)
 
 
 def destinazione_backup(radice: Path, nome: str, motivo: str):
@@ -2015,6 +2166,76 @@ FONT_S = ("Segoe UI", 9)
 FONT_SB = ("Segoe UI Semibold", 9)
 
 
+class BarraTema:
+    """Barra di scorrimento disegnata sul canvas, nei colori del tema (al posto di quella bianca di Windows).
+    `muovi(f)` sposta il contenuto: f è la posizione dell'inizio della parte visibile (0-1).
+    `imposta(lo, hi)` si collega a yscrollcommand di una lista, oppure si chiama a mano."""
+
+    def __init__(self, app, x, y, h, muovi, spessore=6):
+        c = app.c
+        px = app._px
+        self.cv, self.muovi = app.cv, muovi
+        self.x, self.y0, self.h, self.sp = px(x), px(y), px(h), px(spessore)
+        self.lo, self.hi = 0.0, 1.0
+        self.col_traccia = _hex(_mix(_rgb(c["campo"]), _rgb(c["fg"]), .07))
+        self.col_pomello = _hex(_mix(_rgb(c["campo"]), _rgb(c["fg"]), .40))
+        self.col_attivo = c["acc2"]
+        r = self.sp // 2
+        self.r = r
+        self.traccia = self.cv.create_line(self.x, self.y0 + r, self.x, self.y0 + self.h - r, width=self.sp,
+                                           capstyle="round", fill=self.col_traccia, state="hidden")
+        self.pomello = self.cv.create_line(self.x, self.y0 + r, self.x, self.y0 + r + 1, width=self.sp,
+                                           capstyle="round", fill=self.col_pomello, state="hidden")
+        self.visibile = False
+        self.offset = 0
+        app._barre.append(self)
+
+    def _lunghezza(self) -> int:
+        return max(self._min, int((self.hi - self.lo) * self.h)) if self.visibile else 0
+
+    @property
+    def _min(self) -> int:
+        return self.sp * 3
+
+    def _cima(self) -> int:
+        """Posizione (in pixel) dell'inizio del pomello."""
+        lung = self._lunghezza()
+        spazio = 1.0 - (self.hi - self.lo)
+        return self.y0 + int((self.lo / spazio) * (self.h - lung)) if spazio > 1e-9 else self.y0
+
+    def imposta(self, lo, hi):
+        self.lo, self.hi = float(lo), float(hi)
+        self.visibile = (self.hi - self.lo) < 0.999
+        stato = "normal" if self.visibile else "hidden"
+        self.cv.itemconfig(self.traccia, state=stato)
+        self.cv.itemconfig(self.pomello, state=stato)
+        if self.visibile:
+            lung = self._lunghezza()
+            cima = self._cima()
+            self.cv.coords(self.pomello, self.x, cima + self.r, self.x, max(cima + self.r + 1, cima + lung - self.r))
+
+    def colpisce(self, x, y) -> bool:
+        return self.visibile and abs(x - self.x) <= self.sp * 2 and self.y0 <= y <= self.y0 + self.h
+
+    def premi(self, y):
+        cima, lung = self._cima(), self._lunghezza()
+        self.offset = y - cima if cima <= y <= cima + lung else lung // 2  # clic sulla traccia: il pomello salta lì
+        self.cv.itemconfig(self.pomello, fill=self.col_attivo)
+        self.trascina(y)
+
+    def trascina(self, y):
+        lung = self._lunghezza()
+        corsa = self.h - lung
+        spazio = 1.0 - (self.hi - self.lo)
+        if corsa <= 0 or spazio <= 0:
+            return
+        frazione = max(0.0, min(1.0, (y - self.offset - self.y0) / corsa))
+        self.muovi(frazione * spazio)
+
+    def rilascia(self):
+        self.cv.itemconfig(self.pomello, fill=self.col_pomello)
+
+
 class App:
     """Tutto in una sola finestra: cambia solo il contenuto (nessun popup di Windows,
     a parte la scelta della cartella dei progetti). Durante la registrazione la finestra
@@ -2043,6 +2264,11 @@ class App:
             self.k = 1.0
         self.cv = tk.Canvas(self.root, highlightthickness=0, bd=0)
         self.cv.pack(fill="both", expand=True)
+        self._barre = []         # barre di scorrimento della scena corrente
+        self._barra_att = None   # quella che si sta trascinando
+        self.cv.bind("<Button-1>", self._barre_premi, add="+")
+        self.cv.bind("<B1-Motion>", self._barre_muovi, add="+")
+        self.cv.bind("<ButtonRelease-1>", self._barre_rilascia, add="+")
 
         self.var_nome = tk.StringVar(master=self.root)
         self.var_fine = tk.StringVar(master=self.root)
@@ -2058,6 +2284,7 @@ class App:
         self._widgets = []
         self._senza_bordo = False
         self._righe_msg = 1
+        self._imp_y = 0
         self._hover = False
         self._ico_stato = None
         self._tick = 0
@@ -2072,277 +2299,27 @@ class App:
     def c(self):
         return TEMI[self.tema]
 
-    # ---- mattoncini di disegno (le misure sono "logiche": qui si moltiplicano per la scala) ----
-    def _px(self, v) -> int:
-        return int(round(v * self.k))
-
-    def _modo_finestra(self, senza_bordo: bool):
-        """Passa dalla finestra normale alla barretta senza cornice (e viceversa)."""
-        if senza_bordo == self._senza_bordo:
-            return
-        r = self.root
-        try:
-            r.withdraw()
-            r.overrideredirect(senza_bordo)
-            r.update_idletasks()
-            r.deiconify()
-            if not senza_bordo:
-                r.focus_force()
-        except tk.TclError:
-            pass
-        self._senza_bordo = senza_bordo
-
-    def _scena(self, nome, w, h, pos=None, senza_bordo=False):
-        """Svuota la finestra e prepara lo sfondo nuovo di w x h."""
-        self.scena = nome
-        self._hover = False
-        for wd in self._widgets:
-            try:
-                wd.destroy()
-            except Exception:
-                pass
-        self._widgets, self._refs = [], []
-        for ev in ("<Return>", "<Escape>"):
-            self.root.unbind(ev)
-        try:
-            self.root.unbind_all("<MouseWheel>")
-        except Exception:
-            pass
-        self.cv.delete("all")
-        W, H = self._px(w), self._px(h)
-        self.cv.config(width=W, height=H, bg=self.c["grad"][0], cursor="")
-        self.base = img_sfondo(W, H, self.c)
-        self.w, self.h = w, h
-        self._modo_finestra(senza_bordo)
-        self._posiziona(W, H, pos)
-        self.root.update_idletasks()
-        hw = hwnd_finestra(self.root)
-        if senza_bordo:
-            arrotonda_finestra(hw, W, H, min(H, self._px(40)))
-        else:
-            togli_arrotondamento(hw)
-            colora_titolo(hw, _rgb(self.c["grad"][0]), _rgb(self.c["fg"]), self.tema == "scuro")
-
-    def _posiziona(self, W, H, pos):
-        r = self.root
-        sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
-        if pos == "alto_dx":
-            x, y = sw - W - self._px(24), self._px(10)
-        elif pos == "centro":
-            x, y = (sw - W) // 2, max(10, (sh - H) // 3)
-        elif pos == "rec_resta":  # la barra cambia larghezza: il bordo destro resta dov'è
-            m = re.match(r"(\d+)x\d+([+-]\d+)([+-]\d+)", r.geometry())
-            if m:
-                x, y = int(m.group(2)) + int(m.group(1)) - W, int(m.group(3))
-            else:
-                x, y = sw - W - self._px(24), self._px(10)
-            x, y = max(0, min(x, sw - W)), max(0, min(y, sh - H))
-        else:  # resta dov'e'
-            m = re.match(r"\d+x\d+([+-]\d+)([+-]\d+)", r.geometry())
-            x, y = (int(m.group(1)), int(m.group(2))) if m else (100, 100)
-            x, y = max(0, min(x, sw - W)), max(0, min(y, sh - H))
-        r.geometry(f"{W}x{H}+{x}+{y}")
-
-    def _rr(self, x0, y0, x1, y1, r, fill=None, outline=None):
-        rr_su(self.base, (self._px(x0), self._px(y0), self._px(x1), self._px(y1)),
-              self._px(r), fill, outline, 1)
-
-    def _campo_bg(self, x, y, w, h):
-        c = self.c
-        self._rr(x, y, x + w, y + h, 12, _rgb(c["campo"]) + (255,), c["campo_bordo"])
-
-    def _sfondo_pronto(self, tag=None):
-        foto = self._ImageTk.PhotoImage(self.base)
-        self._refs.append(foto)
-        self.cv.create_image(0, 0, image=foto, anchor="nw", tags=(tag,) if tag else ())
-
-    def _testo(self, x, y, s, font=FONT, fill=None, anchor="nw", width=None, justify="left"):
-        return self.cv.create_text(self._px(x), self._px(y), text=s, font=font, fill=fill or self.c["fg"],
-                                   anchor=anchor, width=self._px(width) if width else 0, justify=justify)
-
-    def _etichetta(self, x, y, s):
-        return self._testo(x, y, s, FONT_S, self.c["mut"])
-
-    def _entry(self, x, y, w, h, var):
-        c = self.c
-        e = tk.Entry(self.cv, textvariable=var, font=FONT, bg=c["campo"], fg=c["fg"],
-                     insertbackground=c["fg"], relief="flat", bd=0, highlightthickness=0)
-        self.cv.create_window(self._px(x + 14), self._px(y + h / 2), window=e, anchor="w",
-                              width=self._px(w - 28), height=self._px(h - 14))
-        self._widgets.append(e)
-        return e
-
-    def _foto(self, img):
-        foto = self._ImageTk.PhotoImage(img)
-        self._refs.append(foto)
-        return foto
-
-    def _mani(self, oggetti, entra=None, esce=None, click=None):
-        for o in oggetti:
-            if entra:
-                self.cv.tag_bind(o, "<Enter>", entra)
-            if esce:
-                self.cv.tag_bind(o, "<Leave>", esce)
-            if click:
-                self.cv.tag_bind(o, "<Button-1>", click)
-
-    def _bottone(self, x, y, w, h, testo, cmd, primario=False, font=FONT_B):
-        c = self.c
-        W, H, R = self._px(w), self._px(h), self._px(h / 2)
-        if primario:
-            n = img_bottone(W, H, R, _rgb(c["acc1"]), _rgb(c["acc2"]))
-            o = img_bottone(W, H, R, _mix(_rgb(c["acc1"]), (255, 255, 255), .18),
-                            _mix(_rgb(c["acc2"]), (255, 255, 255), .18))
-            col = c["acc_fg"]
-        else:
-            n = _capa_rr(W, H, R, c["vetro"], c["vetro_bordo"])
-            o = _capa_rr(W, H, R, c["vetro_hover"], c["vetro_bordo"])
-            col = c["fg"]
-        pn, po = self._foto(n), self._foto(o)
-        it = self.cv.create_image(self._px(x), self._px(y), image=pn, anchor="nw")
-        tx = self.cv.create_text(self._px(x + w / 2), self._px(y + h / 2), text=testo, font=font, fill=col)
-        self._mani((it, tx),
-                   entra=lambda _e: (self.cv.itemconfig(it, image=po), self.cv.config(cursor="hand2")),
-                   esce=lambda _e: (self.cv.itemconfig(it, image=pn), self.cv.config(cursor="")),
-                   click=lambda _e: cmd())
-        return it, tx
-
-    def _link(self, x, y, s, cmd, anchor="nw", font=FONT_S):
-        c = self.c
-        t = self._testo(x, y, s, font, c["mut"], anchor)
-        self._mani((t,),
-                   entra=lambda _e: (self.cv.itemconfig(t, fill=c["fg"]), self.cv.config(cursor="hand2")),
-                   esce=lambda _e: (self.cv.itemconfig(t, fill=c["mut"]), self.cv.config(cursor="")),
-                   click=lambda _e: cmd())
-        return t
-
-    def _pillole(self, x, y, opzioni, selezionata, cmd, w=72, h=30, gap=8):
-        """Scelta a pulsanti (al posto del menu a tendina). Restituisce la funzione che cambia la selezione."""
-        c = self.c
-        W, H, R = self._px(w), self._px(h), self._px(h / 2)
-        on = self._foto(img_bottone(W, H, R, _rgb(c["acc1"]), _rgb(c["acc2"])))
-        off = self._foto(_capa_rr(W, H, R, c["vetro"], c["vetro_bordo"]))
-        voci = {}
-        for i, nome in enumerate(opzioni):
-            px_ = x + i * (w + gap)
-            it = self.cv.create_image(self._px(px_), self._px(y), image=off, anchor="nw")
-            tx = self.cv.create_text(self._px(px_ + w / 2), self._px(y + h / 2), text=nome, font=FONT)
-            voci[nome] = (it, tx)
-            self._mani((it, tx), click=lambda _e, n=nome: cmd(n),
-                       entra=lambda _e: self.cv.config(cursor="hand2"), esce=lambda _e: self.cv.config(cursor=""))
-
-        def seleziona(sel):
-            for nome, (it, tx) in voci.items():
-                attiva = nome == sel
-                self.cv.itemconfig(it, image=on if attiva else off)
-                self.cv.itemconfig(tx, fill=c["acc_fg"] if attiva else c["fg"],
-                                   font=FONT_B if attiva else FONT)
-        seleziona(selezionata)
-        return seleziona
-
-    def _intestazione(self, titolo, sotto=None):
-        """Logo arrotondato + titolo, in alto."""
-        logo = self._foto(icona_pil(self._px(40)))
-        self.cv.create_image(self._px(34), self._px(26), image=logo, anchor="nw")
-        self._testo(84, 37 if sotto else 46, titolo, FONT_T, anchor="w")
-        if sotto:
-            self._testo(84, 58, sotto, FONT_S, self.c["mut"], anchor="w")
-
-    def _msg(self, testo, ok=True):
-        """Messaggio nella finestra (al posto dei popup)."""
-        if self.scena == "avvio":
-            servono = max(1, -(-len(testo) // 50))
-            if servono > self._righe_msg:  # il messaggio non ci sta: ricostruisco la schermata piu' alta
-                self._scena_avvio(msg=testo, ok=ok)
+    # ---- barre di scorrimento nei colori del tema ----
+    def _barre_premi(self, e):
+        for b in self._barre:
+            if b.colpisce(e.x, e.y):
+                self._barra_att = b
+                b.premi(e.y)
                 return
-        if getattr(self, "t_msg", None) and self.scena in ("avvio", "progetti"):
-            self.cv.itemconfig(self.t_msg, text=testo, fill=self.c["ok"] if ok else self.c["err"])
 
-    # ---- schermata iniziale ----
-    def _scena_avvio(self, pos=None, msg=None, ok=True):
+    def _barre_muovi(self, e):
+        if self._barra_att:
+            self._barra_att.trascina(e.y)
+
+    def _barre_rilascia(self, _e):
+        if self._barra_att:
+            self._barra_att.rilascia()
+            self._barra_att = None
+
+    def _lista(self, y, h):
+        """Lista con la barra del tema a destra (dentro il riquadro che sta nello sfondo)."""
         c = self.c
-        righe = max(1, -(-len(msg) // 50)) if msg else 1
-        self._righe_msg = righe
-        self._scena("avvio", 380, 518 + 14 * righe, pos)
-        self.root.title(APP)
-        self.root.attributes("-topmost", False)
-        nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
-
-        self._campo_bg(34, 114, 312, 42)
-        self._sfondo_pronto()
-
-        self._intestazione("Registratore azioni", "Un passo, uno screenshot")
-        self._etichetta(34, 94, "Nome del progetto")
-        e = self._entry(34, 114, 312, 42, self.var_nome)
-        e.focus_set()
-
-        self._etichetta(34, 174, "Qualità degli screenshot")
-        corrente = self.cfg["modalita_corrente"]
-        attive = modalita_attive(self.cfg)
-        self.var_modo = corrente if corrente in attive else ("MozJPEG" if "MozJPEG" in attive else "Normale")
-        self.t_desc = self._testo(34, 236, "", FONT_S, c["mut"])
-        self._sel_pill = self._pillole(34, 196, list(attive), self.var_modo, self._sel_modo, w=96 if len(attive) <= 3 else 72)
-        self._sel_modo(self.var_modo, salva=False)
-
-        self._etichetta(34, 264, "Cosa registrare")
-        if self.app_scelta:
-            testo_app = f"Solo {self.app_scelta[0]}   ›"
-        else:
-            testo_app = "Tutto lo schermo   ›"
-        self._bottone(34, 284, 312, 36, testo_app, self._scena_app, font=FONT)
-
-        self._bottone(34, 336, 312, 48, "Avvia registrazione", self._avvia, primario=True)
-        pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
-        fine = str(self.cfg.get("tasto_fine", "f9")).upper()
-        self._bottone(34, 392, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
-        self._testo(190, 440, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
-
-        y_msg = 462
-        self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
-        y_linea = y_msg + 14 * righe + 10
-        self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
-        x = 34
-        for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._guida),
-                           ("Segnala un problema", self._segnala)):
-            self._link(x, y_linea + 12, testo, cmd)
-            x += tkfont.Font(font=FONT_S).measure(testo) / self.k + 18
-        self._testo(346, y_linea + 12, f"v{VERSION}", FONT_S, c["mut"], anchor="ne")
-        if msg:
-            self._msg(msg, ok)
-        self.root.bind("<Return>", lambda _e: self._avvia())
-
-    def _sel_modo(self, nome, salva=True):
-        self.var_modo = nome
-        self._sel_pill(nome)
-        m = modalita_attive(self.cfg).get(nome, {})
-        sub = " · 4:4:4" if m.get("sub444") else ""
-        self.cv.itemconfig(self.t_desc, text=f"{m.get('formato', 'JPEG')} · qualità {m.get('qualita', 65)} · "
-                                             f"dimensione {int(float(m.get('scala', 1)) * 100)}%{sub}")
-        if salva:
-            self.cfg["modalita_corrente"] = nome
-            salva_config(self.cfg)
-
-    # ---- scelta del programma da registrare ----
-    def _scena_app(self):
-        c = self.c
-        self._scena("app", 380, 520)
-        self.root.title(f"Cosa registrare · {APP}")
-        self._campo_bg(34, 126, 312, 220)
-        self._sfondo_pronto()
-
-        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._testo(34, 58, "Cosa registrare", FONT_T)
-        self._etichetta(34, 104, "Scegli un programma aperto, oppure tutto lo schermo")
-
-        self._app_elenco = [None] + elenca_app()
-        lb = tk.Listbox(self.cv, font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0, highlightthickness=0,
-                        selectbackground=c["acc2"], selectforeground="#ffffff", activestyle="none",
-                        exportselection=False)
-        sb = tk.Scrollbar(self.cv, command=lb.yview)
-        lb.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(40), self._px(132), window=lb, anchor="nw", width=self._px(280), height=self._px(208))
-        self.cv.create_window(self._px(322), self._px(132), window=sb, anchor="nw", width=self._px(16), height=self._px(208))
-        self._widgets += [lb, sb]
+        lb = self._lista(132, 208)
         sel = 0
         for i, voce in enumerate(self._app_elenco):
             if voce is None:
@@ -2375,7 +2352,10 @@ class App:
     # ---- impostazioni ----
     def _scena_impostazioni(self):
         c = self.c
-        self._scena("impostazioni", 380, 582)
+        era_qui = self.scena == "impostazioni"
+        tot = 606
+        vis = min(tot, max(400, int(self.root.winfo_screenheight() / self.k) - 130))  # lascia posto a barra del titolo e Start
+        self._scena("impostazioni", 380, vis)
         self.root.title(f"Impostazioni · {APP}")
         self._sfondo_pronto()
 
@@ -2406,9 +2386,171 @@ class App:
         opzioni = ["5", "10", "20", "50"]
         self._etichetta(34, 488, "Backup cancellati: quanti tenerne")
         self._pillole(34, 510, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup, w=72)
-        self._testo(34, 550, f"Le registrazioni annullate vanno nella cartella «{CARTELLA_BACKUP}»; "
-                             "oltre questo numero si elimina la più vecchia.", FONT_S, c["mut"], width=312)
+        self._bottone(34, 554, 312, 36, "Gestisci backup   ›", self._scena_backup, font=FONT)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
+        self._scorri_scena(tot, vis, self._imp_y if era_qui else 0)
+
+    def _scorri_scena(self, tot, vis, y0=0):
+        """Se il contenuto è più alto della finestra (schermi bassi), lo si scorre con rotellina e barra a destra."""
+        if tot <= vis:
+            self._imp_y = 0
+            return
+        ids = self.cv.find_all()
+        for i in ids[1:]:  # il primo è lo sfondo, che resta fermo
+            self.cv.addtag_withtag("scorri", i)
+        tot_px, vis_px = self._px(tot), self._px(vis)
+        massimo = tot_px - vis_px
+        stato = {"y": 0}
+
+        def vai(y):
+            y = max(0, min(massimo, int(y)))
+            if y != stato["y"]:
+                self.cv.move("scorri", 0, stato["y"] - y)
+                stato["y"] = y
+            self._imp_y = y / self.k if self.k else y
+            barra.imposta(y / tot_px, (y + vis_px) / tot_px)
+
+        barra = BarraTema(self, 367, 10, vis - 20, lambda f: vai(f * tot_px))
+        self.root.bind_all("<MouseWheel>", lambda e: vai(stato["y"] - (e.delta / 120) * self._px(48)))
+        vai(self._px(y0))
+
+    # ---- gestione backup (elenco, ripristina, apri, elimina) ----
+    def _bk_cartella(self) -> Path:
+        return Path(self.cfg.get("cartella_radice", "")) / CARTELLA_BACKUP
+
+    def _scena_backup(self, msg=None, ok=True, sel=0):
+        c = self.c
+        self._scena("backup", 380, 604)
+        self.root.title(f"Backup · {APP}")
+        self._campo_bg(34, 126, 312, 190)
+        self._sfondo_pronto()
+        self._bk_conf = None
+        self._bk_gen = getattr(self, "_bk_gen", 0) + 1
+
+        self._link(34, 24, "‹  Indietro", self._scena_impostazioni, font=FONT)
+        self._testo(34, 58, "Backup", FONT_T)
+        self._backup = sincronizza_indice(self._bk_cartella())
+        totale = sum(int(v.get("byte", 0)) for v in self._backup)
+        n = len(self._backup)
+        self._etichetta(34, 104, f"{n} backup · {formatta_dim(totale)} (i più recenti in alto)" if n else "Nessun backup")
+
+        lb = self._lista(132, 178)
+        for v in self._backup:
+            titolo = str(v.get("titolo") or v.get("progetto") or v["cartella"])
+            titolo = titolo if len(titolo) <= 24 else titolo[:23] + "…"
+            lb.insert("end", f"{data_breve(v.get('data'))}  ·  {titolo}")
+        self.lb_bk = lb
+        self.t_bk = self._testo(34, 326, "", FONT_S, c["mut"], width=312)
+        if self._backup:
+            lb.selection_set(min(sel, n - 1))
+            lb.see(min(sel, n - 1))
+            lb.bind("<<ListboxSelect>>", lambda _e: self._bk_dettaglio())
+            lb.bind("<Double-Button-1>", lambda _e: self._bk_apri())
+            self._bk_dettaglio()
+        else:
+            self._testo(190, 220, "Qui compaiono le registrazioni annullate\ne le copie di sicurezza.", FONT_S,
+                        c["mut"], anchor="center", justify="center")
+
+        self._bottone(34, 376, 153, 44, "Ripristina", self._bk_ripristina, primario=True)
+        self._bottone(193, 376, 153, 44, "Apri", self._bk_apri)
+        _it, self._bk_tx_el = self._bottone(34, 428, 153, 36, "Elimina", self._bk_elimina, font=FONT)
+        self._bottone(193, 428, 153, 36, "Apri cartella", self._bk_apri_cartella, font=FONT)
+        self.t_msg = self._testo(34, 478, "", FONT_S, c["ok"], width=312)
+        massimo = int(self.cfg.get("backup_massimo", BACKUP_MASSIMO))
+        self._testo(34, 538, f"Ripristina rimette il progetto tra gli altri, con lo stesso nome, e lo toglie da qui. "
+                             f"Se ne tengono al massimo {massimo} (si cambia in Impostazioni): oltre, si elimina il più "
+                             f"vecchio. L'elenco è salvato in «{INDICE_BACKUP}».", FONT_S, c["mut"], width=312)
+        if msg:
+            self._msg(msg, ok)
+        self.root.bind("<Return>", lambda _e: self._bk_ripristina())
+        self.root.bind("<Escape>", lambda _e: self._scena_impostazioni())
+
+    def _bk_sel(self):
+        if self.scena != "backup" or not self._backup:
+            return None
+        sel = self.lb_bk.curselection()
+        return self._backup[int(sel[0])] if sel else None
+
+    def _bk_dettaglio(self):
+        v = self._bk_sel()
+        self._bk_azzera_conferma()
+        if not v:
+            return
+        motivo = MOTIVI_BACKUP.get(v.get("motivo"), "Backup")
+        passi = int(v.get("passi", 0))
+        quanti = "1 passo" if passi == 1 else f"{passi} passi"
+        self.cv.itemconfig(self.t_bk, text=f"{motivo}  ·  {quanti}  ·  {formatta_dim(int(v.get('byte', 0)))}\n"
+                                           f"Progetto «{v.get('progetto') or v['cartella']}»")
+
+    def _bk_azzera_conferma(self, gen=None):
+        if gen is not None and gen != getattr(self, "_bk_gen", None):
+            return
+        if self.scena != "backup" or not getattr(self, "_bk_conf", None):
+            return
+        self._bk_conf = None
+        try:
+            self.cv.itemconfig(self._bk_tx_el, text="Elimina")
+        except tk.TclError:
+            pass
+
+    def _bk_nessuno(self):
+        self._msg("Scegli un backup dalla lista." if self._backup else "Non ci sono backup.", ok=False)
+
+    def _bk_ripristina(self):
+        v = self._bk_sel()
+        if not v:
+            self._bk_nessuno()
+            return
+        try:
+            dest = ripristina_backup(self._bk_cartella(), v["cartella"], Path(self.cfg.get("cartella_radice", "")))
+        except Exception as e:
+            _log.exception("Errore nel ripristinare il backup")
+            self._msg(f"Non riesco a ripristinare: {e}", ok=False)
+            return
+        self._scena_backup(msg=f"Ripristinato come «{dest.name}»: lo trovi in «Apri un progetto».")
+
+    def _bk_apri(self):
+        v = self._bk_sel()
+        if not v:
+            self._bk_nessuno()
+            return
+        d = self._bk_cartella() / v["cartella"]
+        try:
+            os.startfile(d / "index.html" if (d / "index.html").is_file() else d)
+        except Exception as e:
+            self._msg(f"Non riesco ad aprirlo: {e}", ok=False)
+            return
+        self._msg("Aperto. Per modificarlo o continuarlo, prima ripristinalo.")
+
+    def _bk_apri_cartella(self):
+        bk = self._bk_cartella()
+        try:
+            bk.mkdir(parents=True, exist_ok=True)
+            os.startfile(bk)
+        except Exception as e:
+            self._msg(f"Non riesco ad aprire la cartella: {e}", ok=False)
+
+    def _bk_elimina(self):
+        v = self._bk_sel()
+        if not v:
+            self._bk_nessuno()
+            return
+        if self._bk_conf != v["cartella"]:  # primo clic: chiedo conferma, il secondo elimina
+            self._bk_conf = v["cartella"]
+            self.cv.itemconfig(self._bk_tx_el, text="Sicuro? Elimina")
+            self._msg("Si elimina per sempre: i file non vanno nel Cestino. Clicca di nuovo per confermare.", ok=False)
+            gen = self._bk_gen
+            self.root.after(5000, lambda: self._bk_azzera_conferma(gen))
+            return
+        try:
+            elimina_backup(self._bk_cartella(), v["cartella"])
+        except Exception as e:
+            _log.exception("Errore nell'eliminare il backup")
+            self._bk_azzera_conferma()
+            self._msg(f"Non riesco a eliminarlo: {e}", ok=False)
+            return
+        sel = int(self.lb_bk.curselection()[0]) if self.lb_bk.curselection() else 0
+        self._scena_backup(msg="Backup eliminato.", sel=sel)
 
     # ---- compressione JPEG (Standard / MozJPEG) ----
     def _cursore(self, x, y, w, vmin, vmax, valore, step, al_cambio, al_rilascio):
@@ -2557,14 +2699,7 @@ class App:
         self._etichetta(34, 104, "Scegli il progetto (i più recenti in alto)")
 
         self._progetti = elenca_progetti(Path(self.cfg.get("cartella_radice", "")))
-        lb = tk.Listbox(self.cv, font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0, highlightthickness=0,
-                        selectbackground=c["acc2"], selectforeground="#ffffff", activestyle="none",
-                        exportselection=False)
-        sb = tk.Scrollbar(self.cv, command=lb.yview)
-        lb.config(yscrollcommand=sb.set)
-        self.cv.create_window(self._px(40), self._px(132), window=lb, anchor="nw", width=self._px(280), height=self._px(178))
-        self.cv.create_window(self._px(322), self._px(132), window=sb, anchor="nw", width=self._px(16), height=self._px(178))
-        self._widgets += [lb, sb]
+        lb = self._lista(132, 178)
         for d in self._progetti:
             lb.insert("end", d.name)
         if self._progetti:
@@ -2947,13 +3082,15 @@ class App:
         if rec.ripresa:
             testo = (f"Tolgo solo i passi di questa ripresa: il progetto «{rec.dir.name}» resta com'era prima. "
                      f"I passi tolti non vengono cancellati subito: vanno nella cartella «{CARTELLA_BACKUP}», "
-                     f"accanto ai progetti (ne tengo al massimo {massimo}, poi elimino i più vecchi).")
+                     f"accanto ai progetti (ne tengo al massimo {massimo}, poi elimino i più vecchi). "
+                     f"Li gestisci da Impostazioni → Gestisci backup.")
         elif n == 0:
             testo = f"Non c'è niente da salvare: la cartella vuota «{rec.dir.name}» verrà eliminata."
         else:
             testo = (f"La cartella «{rec.dir.name}» non viene cancellata subito: va nella cartella "
                      f"«{CARTELLA_BACKUP}», accanto ai progetti, e la puoi recuperare. "
-                     f"Ne tengo al massimo {massimo}: quando sono di più, elimino i più vecchi.")
+                     f"Ne tengo al massimo {massimo}: quando sono di più, elimino i più vecchi. "
+                     f"Li gestisci da Impostazioni → Gestisci backup.")
         self._testo(34, 100, testo, FONT_S, c["mut"], width=312)
         self._bottone(34, 236, 312, 48, "Torna indietro", self._scena_fine, primario=True)
         self._bottone(34, 292, 312, 40, "Sì, annulla", self._annulla_conferma)
