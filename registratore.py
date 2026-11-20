@@ -2319,6 +2319,278 @@ class App:
     def _lista(self, y, h):
         """Lista con la barra del tema a destra (dentro il riquadro che sta nello sfondo)."""
         c = self.c
+        lb = tk.Listbox(self.cv, font=FONT, bg=c["campo"], fg=c["fg"], relief="flat", bd=0, highlightthickness=0,
+                        selectbackground=c["acc2"], selectforeground="#ffffff", activestyle="none",
+                        exportselection=False)
+        self.cv.create_window(self._px(40), self._px(y), window=lb, anchor="nw", width=self._px(280), height=self._px(h))
+        barra = BarraTema(self, 333, y + 6, h - 12, lb.yview_moveto)
+        lb.config(yscrollcommand=barra.imposta)
+        self._widgets.append(lb)
+        return lb
+
+    # ---- mattoncini di disegno (le misure sono "logiche": qui si moltiplicano per la scala) ----
+    def _px(self, v) -> int:
+        return int(round(v * self.k))
+
+    def _modo_finestra(self, senza_bordo: bool):
+        """Passa dalla finestra normale alla barretta senza cornice (e viceversa)."""
+        if senza_bordo == self._senza_bordo:
+            return
+        r = self.root
+        try:
+            r.withdraw()
+            r.overrideredirect(senza_bordo)
+            r.update_idletasks()
+            r.deiconify()
+            if not senza_bordo:
+                r.focus_force()
+        except tk.TclError:
+            pass
+        self._senza_bordo = senza_bordo
+
+    def _scena(self, nome, w, h, pos=None, senza_bordo=False):
+        """Svuota la finestra e prepara lo sfondo nuovo di w x h."""
+        self.scena = nome
+        self._hover = False
+        for wd in self._widgets:
+            try:
+                wd.destroy()
+            except Exception:
+                pass
+        self._widgets, self._refs = [], []
+        for ev in ("<Return>", "<Escape>"):
+            self.root.unbind(ev)
+        try:
+            self.root.unbind_all("<MouseWheel>")
+        except Exception:
+            pass
+        self.cv.delete("all")
+        W, H = self._px(w), self._px(h)
+        self.cv.config(width=W, height=H, bg=self.c["grad"][0], cursor="")
+        self.base = img_sfondo(W, H, self.c)
+        self.w, self.h = w, h
+        self._modo_finestra(senza_bordo)
+        self._posiziona(W, H, pos)
+        self.root.update_idletasks()
+        hw = hwnd_finestra(self.root)
+        if senza_bordo:
+            arrotonda_finestra(hw, W, H, min(H, self._px(40)))
+        else:
+            togli_arrotondamento(hw)
+            colora_titolo(hw, _rgb(self.c["grad"][0]), _rgb(self.c["fg"]), self.tema == "scuro")
+
+    def _posiziona(self, W, H, pos):
+        r = self.root
+        sw, sh = r.winfo_screenwidth(), r.winfo_screenheight()
+        if pos == "alto_dx":
+            x, y = sw - W - self._px(24), self._px(10)
+        elif pos == "centro":
+            x, y = (sw - W) // 2, max(10, (sh - H) // 3)
+        elif pos == "rec_resta":  # la barra cambia larghezza: il bordo destro resta dov'è
+            m = re.match(r"(\d+)x\d+([+-]\d+)([+-]\d+)", r.geometry())
+            if m:
+                x, y = int(m.group(2)) + int(m.group(1)) - W, int(m.group(3))
+            else:
+                x, y = sw - W - self._px(24), self._px(10)
+            x, y = max(0, min(x, sw - W)), max(0, min(y, sh - H))
+        else:  # resta dov'e'
+            m = re.match(r"\d+x\d+([+-]\d+)([+-]\d+)", r.geometry())
+            x, y = (int(m.group(1)), int(m.group(2))) if m else (100, 100)
+            x, y = max(0, min(x, sw - W)), max(0, min(y, sh - H))
+        r.geometry(f"{W}x{H}+{x}+{y}")
+
+    def _rr(self, x0, y0, x1, y1, r, fill=None, outline=None):
+        rr_su(self.base, (self._px(x0), self._px(y0), self._px(x1), self._px(y1)),
+              self._px(r), fill, outline, 1)
+
+    def _campo_bg(self, x, y, w, h):
+        c = self.c
+        self._rr(x, y, x + w, y + h, 12, _rgb(c["campo"]) + (255,), c["campo_bordo"])
+
+    def _sfondo_pronto(self, tag=None):
+        foto = self._ImageTk.PhotoImage(self.base)
+        self._refs.append(foto)
+        self.cv.create_image(0, 0, image=foto, anchor="nw", tags=(tag,) if tag else ())
+
+    def _testo(self, x, y, s, font=FONT, fill=None, anchor="nw", width=None, justify="left"):
+        return self.cv.create_text(self._px(x), self._px(y), text=s, font=font, fill=fill or self.c["fg"],
+                                   anchor=anchor, width=self._px(width) if width else 0, justify=justify)
+
+    def _etichetta(self, x, y, s):
+        return self._testo(x, y, s, FONT_S, self.c["mut"])
+
+    def _entry(self, x, y, w, h, var):
+        c = self.c
+        e = tk.Entry(self.cv, textvariable=var, font=FONT, bg=c["campo"], fg=c["fg"],
+                     insertbackground=c["fg"], relief="flat", bd=0, highlightthickness=0)
+        self.cv.create_window(self._px(x + 14), self._px(y + h / 2), window=e, anchor="w",
+                              width=self._px(w - 28), height=self._px(h - 14))
+        self._widgets.append(e)
+        return e
+
+    def _foto(self, img):
+        foto = self._ImageTk.PhotoImage(img)
+        self._refs.append(foto)
+        return foto
+
+    def _mani(self, oggetti, entra=None, esce=None, click=None):
+        for o in oggetti:
+            if entra:
+                self.cv.tag_bind(o, "<Enter>", entra)
+            if esce:
+                self.cv.tag_bind(o, "<Leave>", esce)
+            if click:
+                self.cv.tag_bind(o, "<Button-1>", click)
+
+    def _bottone(self, x, y, w, h, testo, cmd, primario=False, font=FONT_B):
+        c = self.c
+        W, H, R = self._px(w), self._px(h), self._px(h / 2)
+        if primario:
+            n = img_bottone(W, H, R, _rgb(c["acc1"]), _rgb(c["acc2"]))
+            o = img_bottone(W, H, R, _mix(_rgb(c["acc1"]), (255, 255, 255), .18),
+                            _mix(_rgb(c["acc2"]), (255, 255, 255), .18))
+            col = c["acc_fg"]
+        else:
+            n = _capa_rr(W, H, R, c["vetro"], c["vetro_bordo"])
+            o = _capa_rr(W, H, R, c["vetro_hover"], c["vetro_bordo"])
+            col = c["fg"]
+        pn, po = self._foto(n), self._foto(o)
+        it = self.cv.create_image(self._px(x), self._px(y), image=pn, anchor="nw")
+        tx = self.cv.create_text(self._px(x + w / 2), self._px(y + h / 2), text=testo, font=font, fill=col)
+        self._mani((it, tx),
+                   entra=lambda _e: (self.cv.itemconfig(it, image=po), self.cv.config(cursor="hand2")),
+                   esce=lambda _e: (self.cv.itemconfig(it, image=pn), self.cv.config(cursor="")),
+                   click=lambda _e: cmd())
+        return it, tx
+
+    def _link(self, x, y, s, cmd, anchor="nw", font=FONT_S):
+        c = self.c
+        t = self._testo(x, y, s, font, c["mut"], anchor)
+        self._mani((t,),
+                   entra=lambda _e: (self.cv.itemconfig(t, fill=c["fg"]), self.cv.config(cursor="hand2")),
+                   esce=lambda _e: (self.cv.itemconfig(t, fill=c["mut"]), self.cv.config(cursor="")),
+                   click=lambda _e: cmd())
+        return t
+
+    def _pillole(self, x, y, opzioni, selezionata, cmd, w=72, h=30, gap=8):
+        """Scelta a pulsanti (al posto del menu a tendina). Restituisce la funzione che cambia la selezione."""
+        c = self.c
+        W, H, R = self._px(w), self._px(h), self._px(h / 2)
+        on = self._foto(img_bottone(W, H, R, _rgb(c["acc1"]), _rgb(c["acc2"])))
+        off = self._foto(_capa_rr(W, H, R, c["vetro"], c["vetro_bordo"]))
+        voci = {}
+        for i, nome in enumerate(opzioni):
+            px_ = x + i * (w + gap)
+            it = self.cv.create_image(self._px(px_), self._px(y), image=off, anchor="nw")
+            tx = self.cv.create_text(self._px(px_ + w / 2), self._px(y + h / 2), text=nome, font=FONT)
+            voci[nome] = (it, tx)
+            self._mani((it, tx), click=lambda _e, n=nome: cmd(n),
+                       entra=lambda _e: self.cv.config(cursor="hand2"), esce=lambda _e: self.cv.config(cursor=""))
+
+        def seleziona(sel):
+            for nome, (it, tx) in voci.items():
+                attiva = nome == sel
+                self.cv.itemconfig(it, image=on if attiva else off)
+                self.cv.itemconfig(tx, fill=c["acc_fg"] if attiva else c["fg"],
+                                   font=FONT_B if attiva else FONT)
+        seleziona(selezionata)
+        return seleziona
+
+    def _intestazione(self, titolo, sotto=None):
+        """Logo arrotondato + titolo, in alto."""
+        logo = self._foto(icona_pil(self._px(40)))
+        self.cv.create_image(self._px(34), self._px(26), image=logo, anchor="nw")
+        self._testo(84, 37 if sotto else 46, titolo, FONT_T, anchor="w")
+        if sotto:
+            self._testo(84, 58, sotto, FONT_S, self.c["mut"], anchor="w")
+
+    def _msg(self, testo, ok=True):
+        """Messaggio nella finestra (al posto dei popup)."""
+        if self.scena == "avvio":
+            servono = max(1, -(-len(testo) // 50))
+            if servono > self._righe_msg:  # il messaggio non ci sta: ricostruisco la schermata piu' alta
+                self._scena_avvio(msg=testo, ok=ok)
+                return
+        if getattr(self, "t_msg", None) and self.scena in ("avvio", "progetti", "backup"):
+            self.cv.itemconfig(self.t_msg, text=testo, fill=self.c["ok"] if ok else self.c["err"])
+
+    # ---- schermata iniziale ----
+    def _scena_avvio(self, pos=None, msg=None, ok=True):
+        c = self.c
+        righe = max(1, -(-len(msg) // 50)) if msg else 1
+        self._righe_msg = righe
+        self._scena("avvio", 380, 518 + 14 * righe, pos)
+        self.root.title(APP)
+        self.root.attributes("-topmost", False)
+        nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
+
+        self._campo_bg(34, 114, 312, 42)
+        self._sfondo_pronto()
+
+        self._intestazione("Registratore azioni", "Un passo, uno screenshot")
+        self._etichetta(34, 94, "Nome del progetto")
+        e = self._entry(34, 114, 312, 42, self.var_nome)
+        e.focus_set()
+
+        self._etichetta(34, 174, "Qualità degli screenshot")
+        corrente = self.cfg["modalita_corrente"]
+        attive = modalita_attive(self.cfg)
+        self.var_modo = corrente if corrente in attive else ("MozJPEG" if "MozJPEG" in attive else "Normale")
+        self.t_desc = self._testo(34, 236, "", FONT_S, c["mut"])
+        self._sel_pill = self._pillole(34, 196, list(attive), self.var_modo, self._sel_modo, w=96 if len(attive) <= 3 else 72)
+        self._sel_modo(self.var_modo, salva=False)
+
+        self._etichetta(34, 264, "Cosa registrare")
+        if self.app_scelta:
+            testo_app = f"Solo {self.app_scelta[0]}   ›"
+        else:
+            testo_app = "Tutto lo schermo   ›"
+        self._bottone(34, 284, 312, 36, testo_app, self._scena_app, font=FONT)
+
+        self._bottone(34, 336, 312, 48, "Avvia registrazione", self._avvia, primario=True)
+        pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
+        fine = str(self.cfg.get("tasto_fine", "f9")).upper()
+        self._bottone(34, 392, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
+        self._testo(190, 440, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
+
+        y_msg = 462
+        self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
+        y_linea = y_msg + 14 * righe + 10
+        self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
+        x = 34
+        for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._guida),
+                           ("Segnala un problema", self._segnala)):
+            self._link(x, y_linea + 12, testo, cmd)
+            x += tkfont.Font(font=FONT_S).measure(testo) / self.k + 18
+        self._testo(346, y_linea + 12, f"v{VERSION}", FONT_S, c["mut"], anchor="ne")
+        if msg:
+            self._msg(msg, ok)
+        self.root.bind("<Return>", lambda _e: self._avvia())
+
+    def _sel_modo(self, nome, salva=True):
+        self.var_modo = nome
+        self._sel_pill(nome)
+        m = modalita_attive(self.cfg).get(nome, {})
+        sub = " · 4:4:4" if m.get("sub444") else ""
+        self.cv.itemconfig(self.t_desc, text=f"{m.get('formato', 'JPEG')} · qualità {m.get('qualita', 65)} · "
+                                             f"dimensione {int(float(m.get('scala', 1)) * 100)}%{sub}")
+        if salva:
+            self.cfg["modalita_corrente"] = nome
+            salva_config(self.cfg)
+
+    # ---- scelta del programma da registrare ----
+    def _scena_app(self):
+        c = self.c
+        self._scena("app", 380, 520)
+        self.root.title(f"Cosa registrare · {APP}")
+        self._campo_bg(34, 126, 312, 220)
+        self._sfondo_pronto()
+
+        self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._testo(34, 58, "Cosa registrare", FONT_T)
+        self._etichetta(34, 104, "Scegli un programma aperto, oppure tutto lo schermo")
+
+        self._app_elenco = [None] + elenca_app()
         lb = self._lista(132, 208)
         sel = 0
         for i, voce in enumerate(self._app_elenco):
