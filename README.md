@@ -18,8 +18,9 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 - Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
 - **Stampa e salva** (icona della stampante o Ctrl+P): anteprima impaginata, scelta dei passi da includere, formato A4/Letter, verticale/orizzontale, margini, passi per pagina, cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco). Poi «Stampa / Salva PDF…» apre la finestra di stampa del browser: scegliendo «Salva come PDF» ottieni il PDF. Si può anche scaricare l'elenco dei passi in Markdown.
 - **Modifica dalla pagina HTML**: clicchi sul titolo o su una descrizione, scrivi e premi **Salva copia**: nasce la cartella `nome_modificato` accanto all'originale, che non cambia. Il browser chiede una volta di scegliere la cartella che contiene il progetto (serve Edge o Chrome).
+- **Gestione dei backup** (Impostazioni → Gestisci backup): elenco di tutto ciò che è stato annullato o salvato come copia di sicurezza, con data, passi e peso. Da lì si può **ripristinare** un backup tra i progetti, **aprirlo**, **eliminarlo** (con conferma) o aprire la cartella. La cartella `backup cancellati` ha un `indice.json` sempre allineato; i backup fatti con le versioni precedenti vengono aggiunti da soli, e quelli senza pagina (riprese annullate) ricevono il loro `index.html`.
 - Non sovrascrive mai nulla: se un nome esiste già aggiunge `_2`, `_3`…
-- Non lascia file in giro: i `.tmp` di una chiusura anomala e le vecchie cartelle `_MEI` dell'exe in Temp vengono tolti all'avvio successivo, i backup hanno un limite, i report vecchi sul Desktop spariscono dopo 14 giorni, una «Salva copia» fallita non lascia cartelle a metà.
+- Non lascia file in giro: i `.tmp` di una chiusura anomala e le vecchie cartelle `_MEI` dell'exe in Temp vengono tolti all'avvio successivo, i backup hanno un limite (si tolgono i più vecchi), i report vecchi sul Desktop spariscono dopo 14 giorni, una «Salva copia» fallita non lascia cartelle a metà.
 - La barra del registratore viene nascosta dagli screenshot (Windows 10 2004 o successivi).
 - Funziona solo su Windows.
 
