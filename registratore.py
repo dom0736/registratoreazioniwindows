@@ -41,7 +41,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.9.1"
+VERSION = "1.9.5"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -1973,13 +1973,13 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
 GUIDA_FILE = "guida.html"
 
 
-def apri_guida() -> bool:
-    """Apre la guida (pagina HTML inclusa nell'exe) nel browser predefinito."""
+def apri_guida(ancora: str = "") -> bool:
+    """Apre la guida (pagina HTML inclusa nell'exe) nel browser predefinito, se serve già sul punto giusto."""
     try:
         f = risorsa(GUIDA_FILE)
         if not f.is_file():
             return False
-        return bool(webbrowser.open(f.as_uri()))
+        return bool(webbrowser.open(f.as_uri() + (f"#{ancora}" if ancora else "")))
     except Exception:
         return False
 
@@ -2419,6 +2419,61 @@ class App:
     def _etichetta(self, x, y, s):
         return self._testo(x, y, s, FONT_S, self.c["mut"])
 
+    def _righe_testo(self, testo, larg, font=FONT_S) -> int:
+        """Quante righe occupa un testo che va a capo entro larg pixel logici (serve a dimensionare la finestra)."""
+        f = tkfont.Font(font=font)
+        massimo = max(1, self._px(larg))
+        n = 0
+        for par in str(testo).split("\n"):
+            n += 1
+            riga = ""
+            for parola in par.split(" "):
+                prova = f"{riga} {parola}".strip()
+                if riga and f.measure(prova) > massimo:
+                    n += 1
+                    riga = parola
+                else:
+                    riga = prova
+                lunga = f.measure(riga)
+                if lunga > massimo:  # parola senza spazi (es. un percorso): Tk la spezza da sola
+                    n += lunga // massimo
+                    riga = ""
+        return n
+
+    def _ellissi(self, testo, larg, font=FONT_S) -> str:
+        """Accorcia un testo lungo (es. un percorso) con «…» in mezzo, così sta in larg pixel logici."""
+        f = tkfont.Font(font=font)
+        massimo = self._px(larg)
+        t = str(testo)
+        if f.measure(t) <= massimo:
+            return t
+        testa = t[:3]
+        for k in range(len(t) - 3, 0, -1):
+            prova = testa + "…" + t[-k:]
+            if f.measure(prova) <= massimo:
+                return prova
+        return testa + "…"
+
+    @staticmethod
+    def _corto(testo, massimo=150) -> str:
+        t = str(testo)
+        return t if len(t) <= massimo else t[:massimo - 1].rstrip() + "…"
+
+    def _aiuto(self, x, y, ancora):
+        """Piccolo «?» rotondo (x, y = centro): apre la guida nel punto che spiega questa schermata."""
+        c = self.c
+        D_ = self._px(18)
+        n = self._foto(_capa_rr(D_, D_, D_ // 2, c["vetro"], c["vetro_bordo"]))
+        o = self._foto(_capa_rr(D_, D_, D_ // 2, c["vetro_hover"], c["vetro_bordo"]))
+        it = self.cv.create_image(self._px(x), self._px(y), image=n, anchor="center")
+        tx = self.cv.create_text(self._px(x), self._px(y), text="?", font=FONT_SB, fill=c["mut"])
+        self._mani((it, tx),
+                   entra=lambda _e: (self.cv.itemconfig(it, image=o), self.cv.itemconfig(tx, fill=c["fg"]),
+                                     self.cv.config(cursor="hand2")),
+                   esce=lambda _e: (self.cv.itemconfig(it, image=n), self.cv.itemconfig(tx, fill=c["mut"]),
+                                    self.cv.config(cursor="")),
+                   click=lambda _e: self._guida(ancora=ancora))
+
     def _entry(self, x, y, w, h, var):
         c = self.c
         e = tk.Entry(self.cv, textvariable=var, font=FONT, bg=c["campo"], fg=c["fg"],
@@ -2506,8 +2561,9 @@ class App:
 
     def _msg(self, testo, ok=True):
         """Messaggio nella finestra (al posto dei popup)."""
+        testo = self._corto(testo)
         if self.scena == "avvio":
-            servono = max(1, -(-len(testo) // 50))
+            servono = max(1, self._righe_testo(testo, 312))
             if servono > self._righe_msg:  # il messaggio non ci sta: ricostruisco la schermata piu' alta
                 self._scena_avvio(msg=testo, ok=ok)
                 return
@@ -2517,9 +2573,11 @@ class App:
     # ---- schermata iniziale ----
     def _scena_avvio(self, pos=None, msg=None, ok=True):
         c = self.c
-        righe = max(1, -(-len(msg) // 50)) if msg else 1
+        msg = self._corto(msg) if msg else msg
+        righe = max(1, self._righe_testo(msg, 312)) if msg else 1
         self._righe_msg = righe
-        self._scena("avvio", 380, 518 + 14 * righe, pos)
+        y_msg = 446
+        self._scena("avvio", 380, y_msg + 14 * righe + 42, pos)
         self.root.title(APP)
         self.root.attributes("-topmost", False)
         nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
@@ -2527,39 +2585,38 @@ class App:
         self._campo_bg(34, 114, 312, 42)
         self._sfondo_pronto()
 
-        self._intestazione("Registratore azioni", "Un passo, uno screenshot")
+        self._intestazione("Registratore azioni")
         self._etichetta(34, 94, "Nome del progetto")
         e = self._entry(34, 114, 312, 42, self.var_nome)
         e.focus_set()
 
-        self._etichetta(34, 174, "Qualità degli screenshot")
+        self._etichetta(34, 174, "Qualità")
+        self._aiuto(337, 181, "qualita")
         corrente = self.cfg["modalita_corrente"]
         attive = modalita_attive(self.cfg)
         self.var_modo = corrente if corrente in attive else ("MozJPEG" if "MozJPEG" in attive else "Normale")
-        self.t_desc = self._testo(34, 236, "", FONT_S, c["mut"])
         self._sel_pill = self._pillole(34, 196, list(attive), self.var_modo, self._sel_modo, w=96 if len(attive) <= 3 else 72)
         self._sel_modo(self.var_modo, salva=False)
 
-        self._etichetta(34, 264, "Cosa registrare")
+        self._etichetta(34, 244, "Cosa registrare")
         if self.app_scelta:
             testo_app = f"Solo {self.app_scelta[0]}   ›"
         else:
             testo_app = "Tutto lo schermo   ›"
-        self._bottone(34, 284, 312, 36, testo_app, self._scena_app, font=FONT)
+        self._bottone(34, 264, 312, 36, testo_app, self._scena_app, font=FONT)
 
-        self._bottone(34, 336, 312, 48, "Avvia registrazione", self._avvia, primario=True)
+        self._bottone(34, 318, 312, 48, "Avvia registrazione", self._avvia, primario=True)
+        self._bottone(34, 374, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
         pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
         fine = str(self.cfg.get("tasto_fine", "f9")).upper()
-        self._bottone(34, 392, 312, 36, "Apri un progetto", self._scena_progetti, font=FONT)
-        self._testo(190, 440, f"{pausa} pausa / riprendi   ·   {fine} fine e salva", FONT_S, c["mut"], anchor="n")
+        self._testo(190, 424, f"{pausa} pausa   ·   {fine} fine", FONT_S, c["mut"], anchor="n")
 
-        y_msg = 462
         self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
         y_linea = y_msg + 14 * righe + 10
         self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
         x = 34
         for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._guida),
-                           ("Segnala un problema", self._segnala)):
+                           ("Segnala", self._segnala)):
             self._link(x, y_linea + 12, testo, cmd)
             x += tkfont.Font(font=FONT_S).measure(testo) / self.k + 18
         self._testo(346, y_linea + 12, f"v{VERSION}", FONT_S, c["mut"], anchor="ne")
@@ -2570,25 +2627,21 @@ class App:
     def _sel_modo(self, nome, salva=True):
         self.var_modo = nome
         self._sel_pill(nome)
-        m = modalita_attive(self.cfg).get(nome, {})
-        sub = " · 4:4:4" if m.get("sub444") else ""
-        self.cv.itemconfig(self.t_desc, text=f"{m.get('formato', 'JPEG')} · qualità {m.get('qualita', 65)} · "
-                                             f"dimensione {int(float(m.get('scala', 1)) * 100)}%{sub}")
         if salva:
             self.cfg["modalita_corrente"] = nome
             salva_config(self.cfg)
 
     # ---- scelta del programma da registrare ----
     def _scena_app(self):
-        c = self.c
-        self._scena("app", 380, 520)
+        self._scena("app", 380, 480)
         self.root.title(f"Cosa registrare · {APP}")
         self._campo_bg(34, 126, 312, 220)
         self._sfondo_pronto()
 
         self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._aiuto(337, 31, "programma")
         self._testo(34, 58, "Cosa registrare", FONT_T)
-        self._etichetta(34, 104, "Scegli un programma aperto, oppure tutto lo schermo")
+        self._etichetta(34, 104, "Scegli un programma aperto")
 
         self._app_elenco = [None] + elenca_app()
         lb = self._lista(132, 208)
@@ -2608,9 +2661,6 @@ class App:
         self.lb_app = lb
         self._bottone(34, 358, 140, 32, "Aggiorna elenco", self._scena_app, font=FONT)
         self._bottone(34, 402, 312, 44, "Scegli", self._conferma_app, primario=True)
-        self._testo(34, 458, "Con un programma scelto vengono registrati solo i clic fatti sulle sue finestre e i "
-                             "tasti premuti mentre è in primo piano. Aprilo prima, poi premi «Aggiorna elenco».",
-                    FONT_S, c["mut"], width=312)
         self.root.bind("<Return>", lambda _e: self._conferma_app())
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
@@ -2625,40 +2675,54 @@ class App:
     def _scena_impostazioni(self):
         c = self.c
         era_qui = self.scena == "impostazioni"
-        tot = 606
+        tot = 450
         vis = min(tot, max(400, int(self.root.winfo_screenheight() / self.k) - 130))  # lascia posto a barra del titolo e Start
         self._scena("impostazioni", 380, vis)
         self.root.title(f"Impostazioni · {APP}")
+
+        # un solo riquadro, una riga per impostazione: nome a sinistra, scelta a destra
+        altezze = (64, 52, 52, 52, 52, 52)
+        ys = [96]
+        for h in altezze:
+            ys.append(ys[-1] + h)
+        self._rr(34, ys[0], 346, ys[-1], 16, c["card"], c["card_bordo"])
         self._sfondo_pronto()
 
         self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._aiuto(337, 31, "impostazioni")
         self._testo(34, 58, "Impostazioni", FONT_T)
+        for y in ys[1:-1]:
+            self.cv.create_line(self._px(50), self._px(y), self._px(330), self._px(y), fill=c["linea"])
 
-        self._etichetta(34, 108, "Cartella dei progetti")
-        self.t_root = self._testo(34, 130, self.cfg.get("cartella_radice", ""), FONT_S, width=312)
-        self._bottone(34, 172, 110, 32, "Cambia…", self._scegli_root, font=FONT)
+        # cartella dei progetti (il percorso lungo si accorcia in mezzo)
+        self._testo(50, ys[0] + 12, "Cartella dei progetti", FONT)
+        self.t_root = self._testo(50, ys[0] + 36, self._ellissi(self.cfg.get("cartella_radice", ""), 190),
+                                  FONT_S, c["mut"])
+        self._bottone(258, ys[0] + 17, 72, 30, "Cambia…", self._scegli_root, font=FONT)
 
-        self._etichetta(34, 230, "Tema")
-        self._pillole(34, 252, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema, w=96)
+        self._testo(50, ys[1] + 26, "Tema", FONT, anchor="w")
+        self._pillole(184, ys[1] + 12, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema,
+                      w=70, h=28, gap=6)
 
-        self._etichetta(34, 304, "Nascondi la barra negli screenshot")
-        self._pillole(34, 326, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
-                      self._imposta_barra, w=96)
-        self._testo(34, 366, "Funziona su Windows 10 (2004 o successivi) e Windows 11.", FONT_S, c["mut"], width=312)
+        self._testo(50, ys[2] + 26, "Nascondi barra", FONT, anchor="w")
+        self._pillole(212, ys[2] + 12, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
+                      self._imposta_barra, w=56, h=28, gap=6)
 
-        self._etichetta(34, 412, "Compressione JPEG")
+        self._testo(50, ys[3] + 26, "Compressione", FONT, anchor="w")
         if self.cfg.get("jpeg_motore") == "mozjpeg":
-            m = modalita_attive(self.cfg)["MozJPEG"]
-            riassunto = f"MozJPEG · qualità {m['qualita']} · {int(m['scala'] * 100)}%   ›"
+            riassunto = f"MozJPEG · {modalita_attive(self.cfg)['MozJPEG']['qualita']}   ›"
         else:
             riassunto = "Standard   ›"
-        self._bottone(34, 434, 312, 36, riassunto, self._scena_compressione, font=FONT)
+        self._bottone(180, ys[3] + 11, 150, 30, riassunto, self._scena_compressione, font=FONT)
 
         massimo = str(int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
         opzioni = ["5", "10", "20", "50"]
-        self._etichetta(34, 488, "Backup cancellati: quanti tenerne")
-        self._pillole(34, 510, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup, w=72)
-        self._bottone(34, 554, 312, 36, "Gestisci backup   ›", self._scena_backup, font=FONT)
+        self._testo(50, ys[4] + 26, "Backup da tenere", FONT, anchor="w")
+        self._pillole(171, ys[4] + 12, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup,
+                      w=36, h=28, gap=5)
+
+        self._testo(50, ys[5] + 26, "Backup cancellati", FONT, anchor="w")
+        self._bottone(220, ys[5] + 11, 110, 30, "Gestisci   ›", self._scena_backup, font=FONT)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
         self._scorri_scena(tot, vis, self._imp_y if era_qui else 0)
 
@@ -2692,7 +2756,7 @@ class App:
 
     def _scena_backup(self, msg=None, ok=True, sel=0):
         c = self.c
-        self._scena("backup", 380, 604)
+        self._scena("backup", 380, 544)
         self.root.title(f"Backup · {APP}")
         self._campo_bg(34, 126, 312, 190)
         self._sfondo_pronto()
@@ -2700,11 +2764,12 @@ class App:
         self._bk_gen = getattr(self, "_bk_gen", 0) + 1
 
         self._link(34, 24, "‹  Indietro", self._scena_impostazioni, font=FONT)
+        self._aiuto(337, 31, "backup")
         self._testo(34, 58, "Backup", FONT_T)
         self._backup = sincronizza_indice(self._bk_cartella())
         totale = sum(int(v.get("byte", 0)) for v in self._backup)
         n = len(self._backup)
-        self._etichetta(34, 104, f"{n} backup · {formatta_dim(totale)} (i più recenti in alto)" if n else "Nessun backup")
+        self._etichetta(34, 104, f"{n} backup · {formatta_dim(totale)}" if n else "Nessun backup")
 
         lb = self._lista(132, 178)
         for v in self._backup:
@@ -2720,7 +2785,7 @@ class App:
             lb.bind("<Double-Button-1>", lambda _e: self._bk_apri())
             self._bk_dettaglio()
         else:
-            self._testo(190, 220, "Qui compaiono le registrazioni annullate\ne le copie di sicurezza.", FONT_S,
+            self._testo(190, 220, "Qui compaiono le registrazioni annullate.", FONT_S,
                         c["mut"], anchor="center", justify="center")
 
         self._bottone(34, 376, 153, 44, "Ripristina", self._bk_ripristina, primario=True)
@@ -2728,10 +2793,6 @@ class App:
         _it, self._bk_tx_el = self._bottone(34, 428, 153, 36, "Elimina", self._bk_elimina, font=FONT)
         self._bottone(193, 428, 153, 36, "Apri cartella", self._bk_apri_cartella, font=FONT)
         self.t_msg = self._testo(34, 478, "", FONT_S, c["ok"], width=312)
-        massimo = int(self.cfg.get("backup_massimo", BACKUP_MASSIMO))
-        self._testo(34, 538, f"Ripristina rimette il progetto tra gli altri, con lo stesso nome, e lo toglie da qui. "
-                             f"Se ne tengono al massimo {massimo} (si cambia in Impostazioni): oltre, si elimina il più "
-                             f"vecchio. L'elenco è salvato in «{INDICE_BACKUP}».", FONT_S, c["mut"], width=312)
         if msg:
             self._msg(msg, ok)
         self.root.bind("<Return>", lambda _e: self._bk_ripristina())
@@ -2779,7 +2840,7 @@ class App:
             _log.exception("Errore nel ripristinare il backup")
             self._msg(f"Non riesco a ripristinare: {e}", ok=False)
             return
-        self._scena_backup(msg=f"Ripristinato come «{dest.name}»: lo trovi in «Apri un progetto».")
+        self._scena_backup(msg=f"Ripristinato come «{dest.name}».")
 
     def _bk_apri(self):
         v = self._bk_sel()
@@ -2792,7 +2853,7 @@ class App:
         except Exception as e:
             self._msg(f"Non riesco ad aprirlo: {e}", ok=False)
             return
-        self._msg("Aperto. Per modificarlo o continuarlo, prima ripristinalo.")
+        self._msg("Aperto.")
 
     def _bk_apri_cartella(self):
         bk = self._bk_cartella()
@@ -2810,7 +2871,7 @@ class App:
         if self._bk_conf != v["cartella"]:  # primo clic: chiedo conferma, il secondo elimina
             self._bk_conf = v["cartella"]
             self.cv.itemconfig(self._bk_tx_el, text="Sicuro? Elimina")
-            self._msg("Si elimina per sempre: i file non vanno nel Cestino. Clicca di nuovo per confermare.", ok=False)
+            self._msg("Si elimina per sempre. Clicca di nuovo per confermare.", ok=False)
             gen = self._bk_gen
             self.root.after(5000, lambda: self._bk_azzera_conferma(gen))
             return
@@ -2865,19 +2926,18 @@ class App:
     def _scena_compressione(self):
         c = self.c
         moz = self.cfg.get("jpeg_motore") == "mozjpeg"
-        self._scena("compressione", 380, 520)
+        self._scena("compressione", 380, 480 if moz else 250)
         self.root.title(f"Compressione JPEG · {APP}")
         self._sfondo_pronto()
         self._link(34, 24, "‹  Indietro", self._scena_impostazioni, font=FONT)
+        self._aiuto(337, 31, "qualita")
         self._testo(34, 58, "Compressione JPEG", FONT_T)
 
         self._etichetta(34, 104, "Metodo")
         self._pillole(34, 126, ["Standard", "MozJPEG"], "MozJPEG" if moz else "Standard",
                       self._imposta_motore, w=120)
         if not moz:
-            self._testo(34, 176, "Standard usa Pillow, come nelle versioni precedenti. Con MozJPEG a parità di "
-                                 "leggibilità le immagini pesano molto meno: nella schermata iniziale restano «Minima» "
-                                 "e «MozJPEG», con la qualità e la dimensione che scegli qui.",
+            self._testo(34, 176, "MozJPEG crea immagini molto più leggere a parità di nitidezza.",
                         FONT_S, c["mut"], width=312)
             self.root.bind("<Escape>", lambda _e: self._scena_impostazioni())
             return
@@ -2896,12 +2956,10 @@ class App:
         self._etichetta(34, 312, "Colori")
         self._pillole(34, 334, ["4:2:0", "4:4:4"], "4:4:4" if self.cfg.get("moz_444") else "4:2:0",
                       self._imposta_444, w=96)
-        self._testo(34, 378, "Per il testo piccolo conviene dimensione 100% e qualità bassa (30 circa): il "
-                             "ridimensionamento sfoca le lettere più della compressione. «4:4:4» tiene netti i "
-                             "bordi colorati dei riquadri e pesa poco di più.", FONT_S, c["mut"], width=312)
+        self._testo(34, 384, "Per il testo piccolo: qualità 30, dimensione 100%, 4:4:4.", FONT_S, c["mut"], width=312)
         if cjpeg_percorso() is None:
-            self._testo(34, 458, "MozJPEG non è incluso in questa copia del programma: si userà il metodo "
-                                 "standard.", FONT_S, c["err"], width=312)
+            self._testo(34, 424, "MozJPEG non è incluso in questa copia: userò il metodo standard.",
+                        FONT_S, c["err"], width=312)
         self.root.bind("<Escape>", lambda _e: self._scena_impostazioni())
 
     def _salva_moz(self, chiave, valore):
@@ -2946,13 +3004,13 @@ class App:
         if d:
             self.cfg["cartella_radice"] = str(Path(d))
             salva_config(self.cfg)
-            self.cv.itemconfig(self.t_root, text=self.cfg["cartella_radice"])
+            self.cv.itemconfig(self.t_root, text=self._ellissi(self.cfg["cartella_radice"], 190))
 
     # ---- guida (si apre nel browser; F1 solo prima della registrazione) ----
-    def _guida(self, _e=None):
+    def _guida(self, _e=None, ancora: str = ""):
         if self.rec is not None or self.scena == "rec":
             return
-        if not apri_guida():
+        if not apri_guida(ancora):
             try:
                 self._msg("Non riesco ad aprire la guida nel browser.", False)
             except Exception:
@@ -2961,14 +3019,15 @@ class App:
     # ---- apri un progetto (la modifica si fa dalla pagina HTML) ----
     def _scena_progetti(self):
         c = self.c
-        self._scena("progetti", 380, 560)
+        self._scena("progetti", 380, 504)
         self.root.title(f"Apri un progetto · {APP}")
         self._campo_bg(34, 126, 312, 190)
         self._sfondo_pronto()
 
         self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
+        self._aiuto(337, 31, "riprendere")
         self._testo(34, 58, "Apri un progetto", FONT_T)
-        self._etichetta(34, 104, "Scegli il progetto (i più recenti in alto)")
+        self._etichetta(34, 104, "Scegli il progetto")
 
         self._progetti = elenca_progetti(Path(self.cfg.get("cartella_radice", "")))
         lb = self._lista(132, 178)
@@ -2984,14 +3043,10 @@ class App:
         self._bottone(34, 328, 140, 32, "Altra cartella…", self._altra_cartella, font=FONT)
         self._bottone(34, 372, 153, 44, "Apri", self._apri_selezionato, primario=True)
         self._bottone(193, 372, 153, 44, "Riprendi", self._riprendi_selezionato)
-        self._testo(34, 428, "Apri: guarda la pagina; clicca sul titolo o su una descrizione per modificarla "
-                             "(la copia si salva come «nome_modificato»).\n"
-                             "Riprendi: continua a registrare nello stesso progetto, anche un altro giorno; "
-                             "nella pagina compare una riga con la data.", FONT_S, c["mut"], width=312)
-        self.t_msg = self._testo(34, 526, "", FONT_S, c["err"], width=312)
+        self._testo(190, 428, "Apri: guarda  ·  Riprendi: continua a registrare", FONT_S, c["mut"], anchor="n")
+        self.t_msg = self._testo(34, 454, "", FONT_S, c["err"], width=312)
         if self.app_scelta:
-            self.cv.itemconfig(self.t_msg, fill=c["mut"],
-                               text=f"Se riprendi, registrerai solo {self.app_scelta[0]} (lo cambi dalla schermata iniziale).")
+            self.cv.itemconfig(self.t_msg, fill=c["mut"], text=f"Riprendi registrerà solo {self.app_scelta[0]}.")
         self.root.bind("<Return>", lambda _e: self._apri_selezionato())
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
 
@@ -3028,7 +3083,7 @@ class App:
         except Exception as e:
             self._msg(f"Non riesco ad aprire la pagina: {e}", ok=False)
             return
-        self._scena_avvio(msg=f"Aperto «{d.name}». Clicca sul titolo o su una descrizione per modificarla.")
+        self._scena_avvio(msg=f"Aperto «{d.name}».")
 
     def _riprendi_selezionato(self):
         if self.scena != "progetti":
@@ -3318,8 +3373,8 @@ class App:
         self._campo_bg(34, 114, 312, 42)
         self._sfondo_pronto()
 
-        self._intestazione("Registrazione ferma", f"{n} passo salvato" if n == 1 else f"{n} passi registrati")
-        self._etichetta(34, 94, "Nome del progetto (puoi cambiarlo)")
+        self._intestazione("Registrazione ferma", "1 passo registrato" if n == 1 else f"{n} passi registrati")
+        self._etichetta(34, 94, "Nome del progetto")
         self.var_fine.set(self.rec.dir.name)
         e = self._entry(34, 114, 312, 42, self.var_fine)
         e.focus_set()
@@ -3344,29 +3399,23 @@ class App:
         c = self.c
         rec = self.rec
         n = rec.n_nuovi
-        massimo = int(self.cfg.get("backup_massimo", BACKUP_MASSIMO))
-        self._scena("annulla", 380, 372, "centro")
+        self._scena("annulla", 380, 330, "centro")
         self.root.title(f"Annulla registrazione · {APP}")
         self.root.attributes("-topmost", False)
         self._sfondo_pronto()
         quanti = "1 passo" if n == 1 else f"{n} passi"
         self._intestazione("Annullare la registrazione?", f"{quanti} in questa ripresa" if rec.ripresa else quanti)
+        self._aiuto(337, 46, "backup")
         if rec.ripresa:
-            testo = (f"Tolgo solo i passi di questa ripresa: il progetto «{rec.dir.name}» resta com'era prima. "
-                     f"I passi tolti non vengono cancellati subito: vanno nella cartella «{CARTELLA_BACKUP}», "
-                     f"accanto ai progetti (ne tengo al massimo {massimo}, poi elimino i più vecchi). "
-                     f"Li gestisci da Impostazioni → Gestisci backup.")
+            testo = f"Tolgo solo i passi di questa ripresa: «{rec.dir.name}» resta com'era. I passi tolti vanno nei backup."
         elif n == 0:
             testo = f"Non c'è niente da salvare: la cartella vuota «{rec.dir.name}» verrà eliminata."
         else:
-            testo = (f"La cartella «{rec.dir.name}» non viene cancellata subito: va nella cartella "
-                     f"«{CARTELLA_BACKUP}», accanto ai progetti, e la puoi recuperare. "
-                     f"Ne tengo al massimo {massimo}: quando sono di più, elimino i più vecchi. "
-                     f"Li gestisci da Impostazioni → Gestisci backup.")
+            testo = f"La cartella «{rec.dir.name}» va nei backup: la puoi recuperare da Impostazioni."
         self._testo(34, 100, testo, FONT_S, c["mut"], width=312)
-        self._bottone(34, 236, 312, 48, "Torna indietro", self._scena_fine, primario=True)
-        self._bottone(34, 292, 312, 40, "Sì, annulla", self._annulla_conferma)
-        self._testo(190, 344, "Invio ed Esc tornano indietro", FONT_S, c["mut"], anchor="n")
+        self._bottone(34, 176, 312, 48, "Torna indietro", self._scena_fine, primario=True)
+        self._bottone(34, 232, 312, 40, "Sì, annulla", self._annulla_conferma)
+        self._testo(190, 284, "Invio ed Esc tornano indietro", FONT_S, c["mut"], anchor="n")
         self.root.bind("<Return>", lambda _e: self._scena_fine())
         self.root.bind("<Escape>", lambda _e: self._scena_fine())
 
@@ -3383,13 +3432,13 @@ class App:
             rec.ferma()
             if rec.ripresa:
                 rec.annulla_ripresa(radice, massimo)
-                msg = f"Ripresa annullata: «{nome}» è com'era prima. I passi tolti sono in «{CARTELLA_BACKUP}»."
+                msg = f"Ripresa annullata: «{nome}» è com'era prima."
             elif rec.n_passi == 0:
                 shutil.rmtree(rec.dir, ignore_errors=True)
                 msg = "Registrazione annullata (era vuota)."
             else:
                 sposta_in_backup(rec.dir, radice, "annullata", massimo)
-                msg = f"Registrazione annullata. La cartella «{nome}» è in «{CARTELLA_BACKUP}»."
+                msg = "Registrazione annullata. La trovi nei backup."
         except Exception as e:
             _log.exception("Errore nell'annullare la registrazione")
             ok = False
@@ -3398,10 +3447,10 @@ class App:
                 rec._salva_json()
                 rec.scrivi_html()
                 copia_in_backup(rec.dir, radice, "errore", massimo)
-                extra = f" Ho fatto una copia di sicurezza in «{CARTELLA_BACKUP}»."
+                extra = " Copia di sicurezza fatta."
             except Exception:
                 _log.exception("Anche la copia di sicurezza è fallita")
-            msg = f"Non sono riuscito ad annullare ({e}). La cartella «{nome}» è rimasta com'era.{extra}"
+            msg = f"Non sono riuscito ad annullare. «{nome}» è rimasta com'era.{extra}"
         self.rec = None
         self.in_chiusura = False
         self.var_nome.set("")
@@ -3420,7 +3469,7 @@ class App:
             extra = ""
             try:
                 copia_in_backup(rec.dir, rec.dir.parent, "errore", int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
-                extra = f" Ho fatto una copia di sicurezza in «{CARTELLA_BACKUP}»."
+                extra = " Copia di sicurezza fatta."
             except Exception:
                 _log.exception("Anche la copia di sicurezza è fallita")
             if chiudi:
@@ -3430,7 +3479,7 @@ class App:
                     pass
                 return
             self.var_nome.set("")
-            self._scena_avvio(msg=f"Errore nel salvare ({e}).{extra} I passi sono nella cartella «{rec.dir.name}».",
+            self._scena_avvio(msg=f"Errore nel salvare. I passi sono in «{rec.dir.name}».{extra}",
                               ok=False)
 
     def _salva_interno(self, chiudi=False):
@@ -3448,13 +3497,12 @@ class App:
                 rec.dir = destinazione
                 rec.titolo = None  # il titolo segue il nuovo nome della cartella
             except OSError as e:
-                nota = f" Non sono riuscito a rinominare, resta «{attuale}» ({e})."
+                nota = f" Non rinominato: resta «{attuale}»."
         rec._salva_json()
         rec.scrivi_html()
         index = rec.dir / "index.html"
         n = rec.n_passi
         errori = rec.errori[:]
-        cartella = rec.dir
         self.rec = None
         self.in_chiusura = False
         if chiudi:
@@ -3464,9 +3512,9 @@ class App:
             os.startfile(index)
         except Exception:
             pass
-        msg = f"✓ {n} passo salvato in {cartella}.{nota}" if n == 1 else f"✓ {n} passi salvati in {cartella}.{nota}"
+        msg = f"✓ {n} passo salvato.{nota}" if n == 1 else f"✓ {n} passi salvati.{nota}"
         if errori:
-            msg += f" Ci sono stati {len(errori)} errori (il primo: {errori[0]})."
+            msg += f" Errori: {len(errori)} (il primo: {errori[0]})."
         self.var_nome.set("")
         self._scena_avvio(msg=msg, ok=not (errori or nota))
 
@@ -3480,7 +3528,7 @@ class App:
             percorso = crea_report(self.cfg, self.barra_nascosta)
         except Exception as e:
             _log.exception("Impossibile creare il report")
-            self._msg(f"Non sono riuscito a creare il report ({e}). Scrivimi lo stesso a {EMAIL}.", ok=False)
+            self._msg(f"Report non creato ({e}). Scrivi a {EMAIL}.", ok=False)
             return
         try:
             subprocess.Popen(f'explorer /select,"{percorso}"')
@@ -3492,8 +3540,7 @@ class App:
             webbrowser.open(f"mailto:{EMAIL}?subject={oggetto}&body={corpo}")
         except Exception:
             pass
-        self._msg(f"Report creato: {percorso.name}. Contiene dati tecnici, nessuno screenshot né testo "
-                  f"digitato. Allegalo alla mail che si è aperta ({EMAIL}).")
+        self._msg("Report creato sul Desktop: allegalo alla mail che si è aperta.")
 
     def _chiudi(self):
         if self.rec is not None and not self.in_chiusura:
