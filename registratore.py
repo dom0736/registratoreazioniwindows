@@ -2576,8 +2576,8 @@ class App:
         msg = self._corto(msg) if msg else msg
         righe = max(1, self._righe_testo(msg, 312)) if msg else 1
         self._righe_msg = righe
-        y_msg = 446
-        self._scena("avvio", 380, y_msg + 14 * righe + 42, pos)
+        y_msg = 462
+        self._scena("avvio", 380, y_msg + 14 * righe + 56, pos)
         self.root.title(APP)
         self.root.attributes("-topmost", False)
         nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
@@ -2585,7 +2585,7 @@ class App:
         self._campo_bg(34, 114, 312, 42)
         self._sfondo_pronto()
 
-        self._intestazione("Registratore azioni")
+        self._intestazione("Registratore azioni", "Un passo, uno screenshot")
         self._etichetta(34, 94, "Nome del progetto")
         e = self._entry(34, 114, 312, 42, self.var_nome)
         e.focus_set()
@@ -2612,7 +2612,7 @@ class App:
         self._testo(190, 424, f"{pausa} pausa   ·   {fine} fine", FONT_S, c["mut"], anchor="n")
 
         self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
-        y_linea = y_msg + 14 * righe + 10
+        y_linea = y_msg + 14 * righe + 20
         self.cv.create_line(self._px(34), self._px(y_linea), self._px(346), self._px(y_linea), fill=c["linea"])
         x = 34
         for testo, cmd in (("Impostazioni", self._scena_impostazioni), ("Guida", self._guida),
@@ -2675,54 +2675,58 @@ class App:
     def _scena_impostazioni(self):
         c = self.c
         era_qui = self.scena == "impostazioni"
-        tot = 450
+        W_, X0, X1 = 440, 54, 386          # larghezza finestra, margini interni del riquadro
+        altezze = (80, 62, 62, 62, 62, 62)
+        tot = 96 + sum(altezze) + 36
         vis = min(tot, max(400, int(self.root.winfo_screenheight() / self.k) - 130))  # lascia posto a barra del titolo e Start
-        self._scena("impostazioni", 380, vis)
+        self._scena("impostazioni", W_, vis)
         self.root.title(f"Impostazioni · {APP}")
 
         # un solo riquadro, una riga per impostazione: nome a sinistra, scelta a destra
-        altezze = (64, 52, 52, 52, 52, 52)
         ys = [96]
         for h in altezze:
             ys.append(ys[-1] + h)
-        self._rr(34, ys[0], 346, ys[-1], 16, c["card"], c["card_bordo"])
+        self._rr(34, ys[0], W_ - 34, ys[-1], 18, c["card"], c["card_bordo"])
         self._sfondo_pronto()
 
         self._link(34, 24, "‹  Indietro", self._scena_avvio, font=FONT)
-        self._aiuto(337, 31, "impostazioni")
+        self._aiuto(W_ - 43, 31, "impostazioni")
         self._testo(34, 58, "Impostazioni", FONT_T)
         for y in ys[1:-1]:
-            self.cv.create_line(self._px(50), self._px(y), self._px(330), self._px(y), fill=c["linea"])
+            self.cv.create_line(self._px(X0), self._px(y), self._px(X1), self._px(y), fill=c["linea"])
 
         # cartella dei progetti (il percorso lungo si accorcia in mezzo)
-        self._testo(50, ys[0] + 12, "Cartella dei progetti", FONT)
-        self.t_root = self._testo(50, ys[0] + 36, self._ellissi(self.cfg.get("cartella_radice", ""), 190),
+        self._testo(X0, ys[0] + 16, "Cartella dei progetti", FONT)
+        self.t_root = self._testo(X0, ys[0] + 46, self._ellissi(self.cfg.get("cartella_radice", ""), 240),
                                   FONT_S, c["mut"])
-        self._bottone(258, ys[0] + 17, 72, 30, "Cambia…", self._scegli_root, font=FONT)
+        self._bottone(X1 - 84, ys[0] + 24, 84, 32, "Cambia…", self._scegli_root, font=FONT)
 
-        self._testo(50, ys[1] + 26, "Tema", FONT, anchor="w")
-        self._pillole(184, ys[1] + 12, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema,
-                      w=70, h=28, gap=6)
+        def riga_y(i):  # centro verticale della riga i
+            return ys[i] + altezze[i] / 2
 
-        self._testo(50, ys[2] + 26, "Nascondi barra", FONT, anchor="w")
-        self._pillole(212, ys[2] + 12, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
-                      self._imposta_barra, w=56, h=28, gap=6)
+        self._testo(X0, riga_y(1), "Tema", FONT, anchor="w")
+        self._pillole(X1 - 168, riga_y(1) - 16, ["Scuro", "Chiaro"], self.tema.capitalize(), self._imposta_tema,
+                      w=80, h=32, gap=8)
 
-        self._testo(50, ys[3] + 26, "Compressione", FONT, anchor="w")
+        self._testo(X0, riga_y(2), "Nascondi barra", FONT, anchor="w")
+        self._pillole(X1 - 136, riga_y(2) - 16, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
+                      self._imposta_barra, w=64, h=32, gap=8)
+
+        self._testo(X0, riga_y(3), "Compressione", FONT, anchor="w")
         if self.cfg.get("jpeg_motore") == "mozjpeg":
             riassunto = f"MozJPEG · {modalita_attive(self.cfg)['MozJPEG']['qualita']}   ›"
         else:
             riassunto = "Standard   ›"
-        self._bottone(180, ys[3] + 11, 150, 30, riassunto, self._scena_compressione, font=FONT)
+        self._bottone(X1 - 170, riga_y(3) - 17, 170, 34, riassunto, self._scena_compressione, font=FONT)
 
         massimo = str(int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
         opzioni = ["5", "10", "20", "50"]
-        self._testo(50, ys[4] + 26, "Backup da tenere", FONT, anchor="w")
-        self._pillole(171, ys[4] + 12, opzioni, massimo if massimo in opzioni else "10", self._imposta_backup,
-                      w=36, h=28, gap=5)
+        self._testo(X0, riga_y(4), "Backup da tenere", FONT, anchor="w")
+        self._pillole(X1 - 194, riga_y(4) - 16, opzioni, massimo if massimo in opzioni else "10",
+                      self._imposta_backup, w=44, h=32, gap=6)
 
-        self._testo(50, ys[5] + 26, "Backup cancellati", FONT, anchor="w")
-        self._bottone(220, ys[5] + 11, 110, 30, "Gestisci   ›", self._scena_backup, font=FONT)
+        self._testo(X0, riga_y(5), "Backup cancellati", FONT, anchor="w")
+        self._bottone(X1 - 130, riga_y(5) - 17, 130, 34, "Gestisci   ›", self._scena_backup, font=FONT)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
         self._scorri_scena(tot, vis, self._imp_y if era_qui else 0)
 
@@ -2746,7 +2750,7 @@ class App:
             self._imp_y = y / self.k if self.k else y
             barra.imposta(y / tot_px, (y + vis_px) / tot_px)
 
-        barra = BarraTema(self, 367, 10, vis - 20, lambda f: vai(f * tot_px))
+        barra = BarraTema(self, self.w - 13, 10, vis - 20, lambda f: vai(f * tot_px))
         self.root.bind_all("<MouseWheel>", lambda e: vai(stato["y"] - (e.delta / 120) * self._px(48)))
         vai(self._px(y0))
 
