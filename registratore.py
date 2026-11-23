@@ -1382,6 +1382,8 @@ h1{margin:0;font-size:1.4rem;line-height:1.25;letter-spacing:-.01em;overflow-wra
   display:grid;place-items:center;cursor:pointer;text-decoration:none;padding:0;transition:background .12s}
 .ib:hover{background:var(--vetro-h)}
 .ib svg{width:20px;height:20px}
+.ib.lbl{width:auto;padding:0 16px 0 12px;border-radius:999px;gap:7px;grid-auto-flow:column;font:inherit;font-weight:600;font-size:.85rem;white-space:nowrap}
+.ib.lbl span{display:grid}
 .hint{margin:12px 6px 0;color:var(--mut);font-size:.8rem}
 #lista{display:grid;gap:16px;margin-top:18px}
 .passo{--az:#3d6fff;display:grid;grid-template-columns:42px 1fr;gap:6px 12px;padding:18px;border-radius:24px;
@@ -1429,10 +1431,45 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 #lbp{left:14px;top:50%}#lbn{right:14px;top:50%}
 #lbc{position:fixed;bottom:0;left:0;right:0;padding:14px 70px;color:#ddd;font-size:.85rem;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
 @media (max-width:560px){.top{flex-wrap:wrap}.tools{margin-left:auto}.passo{grid-template-columns:1fr}}
+
+/* ---- popup «Trova testi» ---- */
+#tv{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding:18px;
+  background:rgba(8,12,20,.6);backdrop-filter:blur(4px)}
+#tv[hidden]{display:none}
+.tv-box{width:min(620px,100%);max-height:min(720px,100%);display:flex;flex-direction:column;border-radius:24px;overflow:hidden;
+  background:var(--campo);color:var(--fg);border:1px solid var(--cb);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.tv-testa{display:flex;align-items:center;gap:12px;padding:16px 18px 10px}
+.tv-testa h2{margin:0;font-size:1.1rem;flex:1}
+.tv-testa small{color:var(--mut);font-weight:400;font-size:.8rem;margin-left:6px}
+.tv-cerca{margin:0 18px 12px;padding:10px 16px;border-radius:999px;border:1px solid var(--cb);background:var(--vetro);
+  color:var(--fg);font:inherit;font-size:.9rem;outline:none}
+.tv-cerca:focus{box-shadow:0 0 0 2px var(--a1)}
+.tv-cerca::placeholder{color:var(--mut)}
+#tvl{flex:1;min-height:0;overflow:auto;padding:0 10px 14px 14px;margin-right:4px;
+  scrollbar-width:thin;scrollbar-color:var(--a1) transparent}
+#tvl::-webkit-scrollbar{width:10px}
+#tvl::-webkit-scrollbar-track{background:transparent;margin:6px 0}
+#tvl::-webkit-scrollbar-thumb{border-radius:999px;border:2px solid transparent;background:linear-gradient(var(--a1),var(--a2)) padding-box}
+#tvl::-webkit-scrollbar-thumb:hover{border-width:1px}
+.tv-r{display:grid;grid-template-columns:34px 1fr auto;gap:2px 12px;align-items:center;width:100%;margin:0 0 6px;padding:10px 12px;
+  --az:#3d6fff;border-radius:16px;border:1px solid var(--cb);background:var(--vetro);color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:background .12s,box-shadow .12s}
+.tv-r:hover,.tv-r:focus-visible{background:var(--vetro-h);outline:none;box-shadow:0 0 0 2px var(--a1)}
+.tv-r .n{width:30px;height:30px;font-size:.75rem;grid-row:span 2}
+.tv-t{font:600 .88rem Consolas,"Cascadia Mono",monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+.tv-t i{font:inherit;font-weight:400;color:var(--mut);font-style:normal}
+.tv-m{grid-column:2;color:var(--mut);font-size:.75rem;overflow-wrap:anywhere}
+.tv-c{grid-column:3;grid-row:1 / span 2;width:32px;height:32px}
+.tv-c svg{width:16px;height:16px}
+.tv-sep{margin:12px 4px 8px;color:var(--mut);font-size:.72rem;font-weight:600;text-align:center}
+.tv-vuoto{margin:26px 10px;color:var(--mut);text-align:center;font-size:.9rem}
+.passo.trovato{animation:trovato 1.8s ease-out}
+@keyframes trovato{0%,35%{box-shadow:0 0 0 3px var(--a1),0 0 34px var(--a2)}100%{box-shadow:var(--sh)}}
+@media (prefers-reduced-motion:reduce){.passo.trovato{animation:none;box-shadow:0 0 0 3px var(--a1)}}
 @media print{
   :root[data-tema]{--fg:#000;--mut:#555;--card:#fff;--cb:#ccc;--sh:none}
   body{background:#fff}
-  .tools,.op,#lb,#sb,.hint{display:none!important}
+  .tools,.op,#lb,#sb,#tv,.hint{display:none!important}
   .top,.passo{backdrop-filter:none;box-shadow:none}
   [data-ed]:hover,[data-ed].cambiato{background:none}
 }
@@ -1513,6 +1550,7 @@ html[data-tema=chiaro] .foglio.tema{background:#f5f7fb;color:#1b2740}
 __LOGO__
 <div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
+<button class="ib lbl" id="btv" type="button" title="Elenco di tutti i testi digitati: clicca per andare al passo"><span id="btvi"></span>Trova testi</button>
 <button class="ib" id="btema" type="button"></button>
 <button class="ib" id="bpdf" type="button" title="Stampa e salva (Ctrl+P)"></button>
 </div>
@@ -1525,6 +1563,14 @@ __LOGO__
 <span id="sbt"></span>
 <button class="bt" id="bann" type="button">Annulla</button>
 <button class="bt p" id="bsal" type="button">Salva copia</button>
+</div>
+
+<div id="tv" hidden>
+<div class="tv-box" role="dialog" aria-modal="true" aria-labelledby="tvt">
+<div class="tv-testa"><h2 id="tvt">Trova testi<small id="tvn"></small></h2><button class="ib" id="tvx" type="button" title="Chiudi (Esc)">✕</button></div>
+<input class="tv-cerca" id="tvq" type="search" placeholder="Cerca nei testi digitati…" autocomplete="off" spellcheck="false">
+<div id="tvl"></div>
+</div>
 </div>
 
 <div id="lb" hidden>
@@ -1603,7 +1649,9 @@ const ICONE={
   pdf:'<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
   apri:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   cestino:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
-  unico:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/>'
+  unico:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/>',
+  cerca:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8.5 11h5M11 8.5v5"/>',
+  copia:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'
 };
 const svg=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONE[n]+'</svg>';
 
@@ -1662,7 +1710,7 @@ function render(){
       edita(rt,()=>base.testi[i],()=>p.testo,x=>{p.testo=x;});
       r.append(rt);L.append(r);return;
     }
-    const a=document.createElement('article');a.className='passo';a.dataset.az=az(p);
+    const a=document.createElement('article');a.className='passo';a.dataset.az=az(p);a.dataset.i=i;
     const n=document.createElement('div');n.className='n';n.textContent=pad(p.n);
     const c=document.createElement('div');c.style.minWidth='0';
     const d=document.createElement('p');d.className='d';d.textContent=p.testo;
@@ -1845,6 +1893,95 @@ document.addEventListener('keydown',e=>{
     else if(e.key==='ArrowLeft')vai(-1);
   }
 });
+
+/* ---- Trova testi: elenco di tutto ciò che è stato digitato, clic = vai a quel passo ---- */
+/* un passo di testo si chiama «Digitato «…»» o «Digitato «…» e premuto Invio»: lo riconosco dal testo originale,
+   così resta nell'elenco anche se hai cambiato la descrizione (che ti mostro com'è ora) */
+const RE_DIG=/^Digitato «([\s\S]*)»(?: e premuto ([^»]+))?$/;
+function testiDigitati(){
+  const r=[];
+  D.passi.forEach((p,i)=>{
+    if(p.tipo==='ripresa'){r.push({sep:true,t:p.testo});return;}
+    const o=RE_DIG.exec(p.testo_originale||base.testi[i]||p.testo);
+    if(!o)return;
+    const c=RE_DIG.exec(p.testo)||o;
+    r.push({i:i,n:p.n,t:c[1],fine:c[2]||'',ora:p.ora,fin:p.finestra||'',mod:c===o&&p.testo!==(p.testo_originale||base.testi[i])});
+  });
+  return r;
+}
+let tvAperto=false;
+function disegnaTv(){
+  const q=$('#tvq').value.trim().toLowerCase();
+  const tutti=testiDigitati(),voci=tutti.filter(x=>!x.sep);
+  const L=$('#tvl');L.textContent='';
+  $('#tvn').textContent=voci.length?(voci.length===1?'1 testo':voci.length+' testi'):'';
+  if(!voci.length){
+    const v=document.createElement('p');v.className='tv-vuoto';
+    v.textContent="In questo progetto non c'è nessun testo digitato.";L.append(v);return;
+  }
+  let trovati=0,sep=null;
+  tutti.forEach(x=>{
+    if(x.sep){sep=x;return;}
+    if(q&&!(x.t+' '+x.fine+' '+x.fin+' '+x.ora).toLowerCase().includes(q))return;
+    if(sep&&!q){const s=document.createElement('div');s.className='tv-sep';s.textContent=sep.t;L.append(s);}
+    sep=null;trovati++;
+    const b=document.createElement('button');b.type='button';b.className='tv-r';b.dataset.az=az(D.passi[x.i]);
+    const n=document.createElement('span');n.className='n';n.textContent=pad(x.n);
+    const t=document.createElement('span');t.className='tv-t';
+    t.append(document.createTextNode(x.t));
+    if(x.fine){const f=document.createElement('i');f.textContent='  ⏎ '+x.fine;t.append(f);}
+    const m=document.createElement('span');m.className='tv-m';m.textContent=x.ora+(x.fin?' · '+x.fin:'');
+    const c=document.createElement('span');c.className='ib tv-c';c.title='Copia il testo';c.innerHTML=svg('copia');
+    c.addEventListener('click',e=>{
+      e.stopPropagation();
+      const fatto=()=>{c.title='Copiato!';c.style.color='var(--ok)';setTimeout(()=>{c.title='Copia il testo';c.style.color='';},1200);};
+      try{navigator.clipboard.writeText(x.t).then(fatto,()=>{});}catch(_){}
+    });
+    b.append(n,t,c,m);
+    b.addEventListener('click',()=>vaiAlPasso(x.i));
+    L.append(b);
+  });
+  if(!trovati){
+    const v=document.createElement('p');v.className='tv-vuoto';
+    v.textContent='Nessun testo corrisponde a «'+$('#tvq').value.trim()+'».';L.append(v);
+  }
+}
+function apriTv(){
+  if(tvAperto)return;
+  tvAperto=true;$('#tvq').value='';disegnaTv();
+  $('#tv').hidden=false;document.body.style.overflow='hidden';
+  $('#tvq').focus();
+}
+function chiudiTv(){
+  if(!tvAperto)return;
+  tvAperto=false;$('#tv').hidden=true;
+  if(cur<0&&!aperta())document.body.style.overflow='';
+}
+function vaiAlPasso(i){
+  chiudiTv();
+  const el=document.querySelector('.passo[data-i="'+i+'"]');
+  if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.classList.remove('trovato');void el.offsetWidth;el.classList.add('trovato');
+  setTimeout(()=>el.classList.remove('trovato'),2000);
+}
+$('#btvi').innerHTML=svg('cerca');
+$('#btv').onclick=apriTv;
+$('#tvx').onclick=chiudiTv;
+$('#tv').addEventListener('click',e=>{if(e.target.id==='tv')chiudiTv();});
+$('#tvq').addEventListener('input',disegnaTv);
+$('#tvq').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const b=document.querySelector('#tvl .tv-r');if(b)b.click();}
+  else if(e.key==='ArrowDown'){const b=document.querySelector('#tvl .tv-r');if(b){e.preventDefault();b.focus();}}
+});
+$('#tvl').addEventListener('keydown',e=>{
+  if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+  const t=[...document.querySelectorAll('#tvl .tv-r')],k=t.indexOf(document.activeElement);
+  if(k<0)return;e.preventDefault();
+  if(e.key==='ArrowDown'){if(t[k+1])t[k+1].focus();}
+  else if(k>0)t[k-1].focus();else $('#tvq').focus();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&tvAperto){e.preventDefault();chiudiTv();}});
 
 /* ---- stampa e salva: anteprima impaginata, scelta dei passi, opzioni ---- */
 const CARTE={a4:[793,1122],letter:[816,1056]};   /* px a 96 dpi, arrotondati per difetto: niente pagina bianca in più */
@@ -2047,7 +2184,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
     img_logo = f'<img class="logo" alt="" src="data:image/png;base64,{logo}">' if logo else ""
     tema = TEMA_HTML if TEMA_HTML in ("scuro", "chiaro") else "scuro"
     colori_css = "\n".join(
-        f".passo[data-az={k}],.pb[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
+        f".passo[data-az={k}],.pb[data-az={k}],.tv-r[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
         for k, (_nome, (r, g, b)) in AZIONI.items())
     pagina = (HTML_TEMPLATE
               .replace("__TEMA__", tema)
