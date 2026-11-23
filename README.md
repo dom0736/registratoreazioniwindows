@@ -7,9 +7,9 @@ e alla fine crea una pagina HTML con tutti i passi, le descrizioni modificabili 
 Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsiasi programma.
 
 ## Demo interattiva
-`demo.html` mostra tutto quello che il programma sa fare con **finestre simulate**: si clicca sugli elementi evidenziati (o si preme Avanti) per vedere come si avvia una registrazione, si sceglie un programma, si usa la barretta, si modifica la pagina HTML, si esporta, si ripristinano i backup, si apre `config.json`… senza registrare niente.
-- Si apre da **Impostazioni → Demo interattiva → Apri**, dal pulsante ▶ in alto nella guida e dai pulsanti «Guarda la demo» di ogni sezione della guida.
-- Alla **prima volta** che si apre il programma (nessuna `config.json` e nessun progetto) compare una schermata «Sembra la tua prima volta qui» con **Guarda la demo** o **Salta**. Non torna più.
+Una finta schermata di Windows: sul desktop ci sono le guide delle varie sezioni (come si usa, un solo programma, barretta, pagina HTML, riprendere, backup, impostazioni, avanzate). Aprendone una, il programma si muove da solo in finestre simulate e ogni passo viene spiegato: si clicca sull'elemento che lampeggia, oppure si preme Avanti, senza registrare niente.
+- Si apre da **Impostazioni → Demo interattiva → Apri**, dal pulsante ▶ in alto nella Guida e dai pulsanti «Guarda la demo» di ogni sezione della Guida.
+- Alla **prima volta** che si apre il programma compare «Sembra la tua prima volta qui» con **Guarda la demo** o **Salta**. Non torna più.
 
 ## Novità della versione 2.1
 - **Esporta file unico** ora si fa dal programma («Apri un progetto → Esporta file unico»): si sceglie dove salvarlo con «Salva con nome» e dentro c'è solo il progetto selezionato. Il pulsante nella pagina HTML, che chiedeva la cartella con tutti i progetti, è stato tolto.
@@ -50,7 +50,7 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 
 ## Uso
 Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
-**F10** mette in pausa, **F9** finisce e salva. Il pulsante **Guida** (o **F1**, prima di avviare la registrazione) apre nel browser la guida completa (`guida.html`).
+**F10** mette in pausa, **F9** finisce e salva. Il pulsante **Guida** (o **F1**, prima di avviare la registrazione) apre nel browser la guida completa.
 
 ## Scaricare l'exe
 1. Vai su **Releases** (colonna a destra del repository) e scarica `RegistratoreAzioni.exe` dell'ultima versione.
@@ -60,7 +60,7 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
 Per usare un'icona personalizzata basta aggiungere un `icon.png` quadrato (512×512 va benissimo, anche più grande) nella radice del repository.
-Il file `guida.html` è la guida aperta dal pulsante Guida / F1 e `demo.html` la demo (si aprono entrambi dal programma): tienili nel repository e collegati tra loro. Con ogni nuova versione ricordati di aggiornare il numero in `registratore.py` (`VERSION`) e in `guida.html` (titolo, intestazione, piè di pagina e oggetto della mail).
+La guida (pulsante Guida / F1) e la demo (Impostazioni) sono pagine incluse nell'exe, che prende l'icona da `icon.png`: tienile nel repository. Con ogni nuova versione ricordati di aggiornare il numero in `registratore.py` (`VERSION`) e in `guida.html` (titolo, intestazione, piè di pagina e oggetto della mail).
 Ogni tag `v*` pubblica una release e ne tiene solo le ultime 3, così c'è sempre una versione precedente a cui tornare. La build si ferma se `tools/cjpeg.exe` non corrisponde all'impronta SHA256 attesa nel workflow.
 Il file `marchio_registratore.txt` serve alla pulizia automatica delle cartelle temporanee: tienilo nel repository.
 Gli angoli vengono arrotondati in automatico per l'exe, la finestra e la pagina HTML. I colori dell'interfaccia seguono l'icona (grigio-blu, blu→magenta, pallino rosso). Senza `icon.png` il programma usa un'icona di riserva.
