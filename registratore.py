@@ -1495,6 +1495,26 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 .tv-c svg{width:16px;height:16px}
 .tv-sep{margin:12px 4px 8px;color:var(--mut);font-size:.72rem;font-weight:600;text-align:center}
 .tv-vuoto{margin:26px 10px;color:var(--mut);text-align:center;font-size:.9rem}
+.tv-grande{width:min(1080px,100%);height:min(90vh,860px);max-height:100%}
+.tv-corpo{flex:1;min-height:0;display:grid;grid-template-columns:280px minmax(0,1fr)}
+.tv-corpo #tvl{grid-column:2;grid-row:1}
+.tv-corpo .tv-filtri{grid-column:1;grid-row:1}
+@media (min-width:761px){
+  .tv-corpo .tv-filtri[hidden]{display:grid}
+  .tv-corpo .tv-filtri{margin:0 4px 14px 18px;max-height:none;align-content:start;overflow:auto}
+  .tv-corpo .tv-g{grid-template-columns:1fr;gap:6px}
+  .tv-corpo .tv-g>span{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+  .chip.fl{display:none}
+  .tv-grande .tv-r{padding:12px 14px;margin-bottom:8px}
+  .tv-grande .tv-t{font-size:.95rem}
+  .tv-grande .tv-m{font-size:.78rem}
+}
+@media (max-width:760px){
+  .tv-grande{height:min(94vh,100%)}
+  .tv-corpo{display:flex;flex-direction:column}
+  .tv-corpo .tv-filtri{max-height:34vh;flex:none}
+  .tv-corpo #tvl{flex:1}
+}
 .gu-box{width:min(760px,100%)}
 .gu-testo{margin:0;padding:0 22px 6px;color:var(--mut);font-size:.9rem}
 .gu-fig{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:12px 22px 4px;overflow:auto;min-height:0}
@@ -1615,17 +1635,18 @@ __LOGO__
 </div>
 
 <div id="tv" hidden>
-<div class="tv-box" role="dialog" aria-modal="true" aria-labelledby="tvt">
+<div class="tv-box tv-grande" role="dialog" aria-modal="true" aria-labelledby="tvt">
 <div class="tv-testa"><h2 id="tvt">Cerca<small id="tvn"></small></h2><button class="ib" id="tvx" type="button" title="Chiudi (Esc)">✕</button></div>
 <div class="tv-riga"><input class="tv-cerca" id="tvq" type="search" placeholder="Cerca parole nei passi…" autocomplete="off" spellcheck="false"><button class="chip aa" id="tvcs" type="button" aria-pressed="false" title="Distingui maiuscole e minuscole">Aa</button></div>
 <div class="tv-riga" id="tvm">
 <button class="chip" type="button" data-m="all" aria-pressed="true">Tutte le parole</button>
 <button class="chip" type="button" data-m="any" aria-pressed="false">Una qualsiasi</button>
 <button class="chip" type="button" data-m="frase" aria-pressed="false">Frase esatta</button>
-<button class="chip fl" id="tvfb" type="button" aria-expanded="true">Filtri</button>
+<button class="chip fl" id="tvfb" type="button" aria-expanded="false">Filtri</button>
 </div>
 <p class="tv-aiuto">-parola esclude una parola · "tra virgolette" cerca una frase</p>
-<div class="tv-filtri" id="tvf">
+<div class="tv-corpo">
+<div class="tv-filtri" id="tvf" hidden>
 <div class="tv-g"><span>Cerca in</span><div class="tv-ch" id="tvd">
 <button class="chip" type="button" data-d="desc" aria-pressed="true">Descrizioni</button>
 <button class="chip" type="button" data-d="dig" aria-pressed="true">Testi digitati</button>
@@ -1636,6 +1657,7 @@ __LOGO__
 <div class="tv-g"><span>Altro</span><div class="tv-ch"><button class="chip" type="button" id="tvmod" aria-pressed="false" title="Passi con la descrizione cambiata">Solo modificati</button><button class="chip" type="button" id="tvres">Azzera filtri</button></div></div>
 </div>
 <div id="tvl"></div>
+</div>
 </div>
 </div>
 
