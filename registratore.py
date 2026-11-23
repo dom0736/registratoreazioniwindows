@@ -133,6 +133,7 @@ CONFIG_DEFAULT = {
     "moz_qualita": 30,          # 10-90
     "moz_scala": 100,           # 50-100 (% della dimensione dello schermo)
     "moz_444": False,           # True = colori a piena risoluzione (bordi dei riquadri piu' netti)
+    "benvenuto_visto": False,   # True dopo il popup «sembra la tua prima volta qui»
 }
 
 
@@ -2324,15 +2325,26 @@ def esporta_unico(d: Path, dest: Path | None = None) -> Path:
 GUIDA_FILE = "guida.html"
 
 
-def apri_guida(ancora: str = "") -> bool:
-    """Apre la guida (pagina HTML inclusa nell'exe) nel browser predefinito, se serve già sul punto giusto."""
+DEMO_FILE = "demo.html"
+
+
+def apri_pagina(nome: str, ancora: str = "") -> bool:
+    """Apre una pagina HTML inclusa nell'exe (guida, demo) nel browser predefinito, se serve già sul punto giusto."""
     try:
-        f = risorsa(GUIDA_FILE)
+        f = risorsa(nome)
         if not f.is_file():
             return False
         return bool(webbrowser.open(f.as_uri() + (f"#{ancora}" if ancora else "")))
     except Exception:
         return False
+
+
+def apri_guida(ancora: str = "") -> bool:
+    return apri_pagina(GUIDA_FILE, ancora)
+
+
+def apri_demo(ancora: str = "") -> bool:
+    return apri_pagina(DEMO_FILE, ancora)
 
 
 def _anonimizza(testo: str) -> str:
@@ -2596,12 +2608,15 @@ class App:
         global TEMA_HTML
         from PIL import ImageTk
         self._ImageTk = ImageTk
+        self._prima_volta = not CONFIG_FILE.exists()  # nessuna config = presunta prima volta (va letto prima di salvare)
         self.cfg = carica_config()
         self.tema = self.cfg.get("tema") if self.cfg.get("tema") in TEMI else "scuro"
         TEMA_HTML = self.tema
         if not self.cfg.get("cartella_radice"):
             self.cfg["cartella_radice"] = str(Path.home() / "Documents" / "Registratore Azioni")
             salva_config(self.cfg)
+        if self._prima_volta and (self.cfg.get("benvenuto_visto") or elenca_progetti(Path(self.cfg["cartella_radice"]))):
+            self._prima_volta = False  # config persa ma progetti già presenti (o benvenuto già visto): non è la prima volta
 
         self.root = tk.Tk()
         self.root.title(APP)
@@ -2644,7 +2659,10 @@ class App:
             self.root.iconphoto(True, self.icon_img)
         except Exception:
             self.icon_img = None
-        self._scena_avvio(pos="centro")
+        if self._prima_volta:
+            self._scena_benvenuto()
+        else:
+            self._scena_avvio(pos="centro")
 
     @property
     def c(self):
@@ -2983,6 +3001,44 @@ class App:
             self.cfg["modalita_corrente"] = nome
             salva_config(self.cfg)
 
+    # ---- benvenuto: compare solo alla presunta prima volta ----
+    def _scena_benvenuto(self):
+        c = self.c
+        testo = ("Vuoi vedere come funziona? La demo si apre nel browser e mostra tutto con finestre simulate: "
+                 "puoi provare ogni passaggio senza registrare niente.")
+        righe = self._righe_testo(testo, 276, FONT)
+        h_card = 32 + 18 * righe
+        y_b = 92 + h_card + 18
+        self._scena("benvenuto", 380, y_b + 104 + 34, "centro")
+        self.root.title(APP)
+        self._rr(34, 92, 346, 92 + h_card, 18, c["card"], c["card_bordo"])
+        self._sfondo_pronto()
+        self._intestazione("Registratore azioni", "Sembra la tua prima volta qui")
+        self._testo(52, 108, testo, FONT, c["fg"], width=276)
+        self._bottone(34, y_b, 312, 48, "Guarda la demo", self._benvenuto_demo, primario=True)
+        self._bottone(34, y_b + 56, 312, 36, "Salta, faccio da solo", self._scena_avvio, font=FONT)
+        self._testo(190, y_b + 106, "Puoi riaprire la demo quando vuoi da Impostazioni.", FONT_S, c["mut"],
+                    anchor="n", width=312, justify="center")
+        self.root.bind("<Return>", lambda _e: self._benvenuto_demo())
+        self.root.bind("<Escape>", lambda _e: self._scena_avvio())
+        self.cfg["benvenuto_visto"] = True  # il popup non deve tornare, qualunque scelta si faccia
+        salva_config(self.cfg)
+
+    def _benvenuto_demo(self):
+        ok = apri_demo()
+        self._scena_avvio()
+        if not ok:
+            self._msg("Non riesco ad aprire la demo nel browser.", False)
+
+    def _demo(self, _e=None, ancora: str = ""):
+        if self.rec is not None or self.scena == "rec":
+            return
+        if not apri_demo(ancora):
+            try:
+                self._msg("Non riesco ad aprire la demo nel browser.", False)
+            except Exception:
+                pass
+
     # ---- scelta del programma da registrare ----
     def _scena_app(self):
         self._scena("app", 380, 480)
@@ -3028,7 +3084,7 @@ class App:
         c = self.c
         era_qui = self.scena == "impostazioni"
         W_, X0, X1 = 440, 54, 386          # larghezza finestra, margini interni del riquadro
-        altezze = (80, 62, 62, 62, 62, 62)
+        altezze = (80, 62, 62, 62, 62, 62, 62)
         tot = 96 + sum(altezze) + 36
         vis = min(tot, max(400, int(self.root.winfo_screenheight() / self.k) - 130))  # lascia posto a barra del titolo e Start
         self._scena("impostazioni", W_, vis)
@@ -3079,6 +3135,9 @@ class App:
 
         self._testo(X0, riga_y(5), "Backup cancellati", FONT, anchor="w")
         self._bottone(X1 - 130, riga_y(5) - 17, 130, 34, "Gestisci   ›", self._scena_backup, font=FONT)
+
+        self._testo(X0, riga_y(6), "Demo interattiva", FONT, anchor="w")
+        self._bottone(X1 - 130, riga_y(6) - 17, 130, 34, "Apri   ›", self._demo, font=FONT)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
         self._scorri_scena(tot, vis, self._imp_y if era_qui else 0)
 
