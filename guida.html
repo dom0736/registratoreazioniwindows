@@ -145,6 +145,7 @@ footer a{color:inherit}
   <a href="#riprendere">Riprendere</a>
   <a href="#backup">Backup</a>
   <a href="#impostazioni">Impostazioni</a>
+  <a href="#avanzate">Avanzate</a>
   <a href="#file">File</a>
   <a href="#da-sapere">Da sapere</a>
   <a href="#segnalazioni">Segnalazioni</a>
@@ -169,7 +170,7 @@ footer a{color:inherit}
       <tr><td><kbd>F10</kbd></td><td>Pausa e ripresa</td></tr>
       <tr><td><kbd>F9</kbd></td><td>Fine della registrazione</td></tr>
     </table>
-    <p>I tasti di pausa e fine si cambiano in <code>config.json</code> (vedi <a href="#impostazioni">Impostazioni</a>).</p>
+    <p>Se vuoi, puoi scegliere altri tasti: vedi <a href="#avanzate">Impostazioni avanzate</a>.</p>
   </div>
 </article>
 
@@ -219,7 +220,7 @@ footer a{color:inherit}
     <h2>Qualità degli screenshot e MozJPEG</h2>
     <p>Ci sono quattro profili: <strong>Minima, Leggera, Normale, Nitida</strong>. <em>Normale</em> va bene quasi sempre.</p>
     <p>In <strong>Impostazioni → Compressione</strong> puoi attivare <strong>MozJPEG</strong>: immagini molto più leggere a parità di nitidezza, con due cursori per qualità e dimensione. Con MozJPEG attivo, nella schermata iniziale restano solo <strong>Minima</strong> e <strong>MozJPEG</strong>.</p>
-    <div class="nota"><p>Per leggere bene anche i testi piccoli usa <strong>Dimensione 100%</strong>, <strong>Qualità 25–30</strong> e <strong>4:4:4</strong>, che mantiene nitidi i bordi colorati. Se <code>cjpeg</code> manca o fallisce, il programma usa da solo il metodo standard e non perdi nessuno screenshot.</p></div>
+    <div class="nota"><p>Per leggere bene anche i testi piccoli usa <strong>Dimensione 100%</strong>, <strong>Qualità 25–30</strong> e <strong>4:4:4</strong>, che mantiene nitidi i bordi colorati. Se MozJPEG non funziona per qualche motivo, il programma usa da solo il metodo normale e non perdi nessuno screenshot.</p></div>
   </div>
 </article>
 
@@ -277,7 +278,7 @@ footer a{color:inherit}
       <li><strong>Apri cartella:</strong> mostra <code>backup cancellati</code> in Esplora risorse.</li>
     </ul>
     <p>Si tengono al massimo 10 backup (5, 10, 20 o 50 da Impostazioni). Quando sono di più, vengono eliminati i più vecchi.</p>
-    <div class="nota"><p>L'elenco è salvato in <code>indice.json</code> e si aggiorna da solo anche se sposti o cancelli una cartella a mano. I backup fatti con le versioni precedenti entrano nell'elenco la prima volta che lo apri.</p></div>
+    <div class="nota"><p>L'elenco si aggiorna da solo anche se sposti o cancelli una cartella a mano. I backup fatti con le versioni precedenti entrano nell'elenco la prima volta che lo apri.</p></div>
   </div>
 </article>
 
@@ -286,43 +287,66 @@ footer a{color:inherit}
   <div class="cont">
     <h2>Impostazioni</h2>
     <ul>
-      <li><strong>Cartella dei progetti:</strong> dove salvare le registrazioni. Il percorso lungo viene accorciato nella finestra.</li>
+      <li><strong>Cartella dei progetti:</strong> dove salvare le registrazioni.</li>
       <li><strong>Tema:</strong> scuro o chiaro, vale anche per le pagine HTML.</li>
       <li><strong>Nascondi barra:</strong> esclude la barretta dagli screenshot. Funziona su Windows 10 (versione 2004 o successiva) e su Windows 11.</li>
       <li><strong>Compressione:</strong> Standard o MozJPEG, con qualità e dimensione.</li>
       <li><strong>Backup da tenere:</strong> quanti conservarne (5, 10, 20 o 50).</li>
       <li><strong>Backup cancellati:</strong> <strong>Gestisci</strong> apre l'elenco (vedi <a href="#backup">Annullare e gestire i backup</a>).</li>
     </ul>
-    <p>Se lo schermo è basso, le Impostazioni scorrono con la rotellina o con la barra a destra. I tasti rapidi (<code>tasto_pausa</code>, <code>tasto_fine</code>) e i profili avanzati si trovano in <code>%APPDATA%\RegistratoreAzioni\config.json</code>.</p>
+    <p>Se lo schermo è basso, le Impostazioni scorrono con la rotellina o con la barra a destra. Per cambiare i tasti rapidi o altre opzioni che qui non ci sono, vedi <a href="#avanzate">Impostazioni avanzate</a>.</p>
+  </div>
+</article>
+
+<article class="passo" id="avanzate">
+  <div class="n">10</div>
+  <div class="cont">
+    <h2>Impostazioni avanzate</h2>
+    <p>Alcune opzioni non hanno un pulsante nel programma: si cambiano modificando un piccolo file di testo chiamato <code>config.json</code>. È facoltativo, il programma funziona benissimo anche senza.</p>
+    <h3>Come aprire il file</h3>
+    <ol>
+      <li>Chiudi Registratore Azioni.</li>
+      <li>Premi insieme <kbd>Win</kbd> + <kbd>R</kbd>, scrivi <code>%APPDATA%\RegistratoreAzioni</code> e premi <kbd>Invio</kbd>. Si apre la cartella del programma.</li>
+      <li>Fai clic destro su <code>config.json</code>, scegli <strong>Apri con</strong> e poi <strong>Blocco note</strong>.</li>
+      <li>Cambia il valore che ti serve (vedi sotto), salva con <kbd>Ctrl</kbd>+<kbd>S</kbd> e riapri il programma.</li>
+    </ol>
+    <h3>Cosa puoi cambiare</h3>
+    <table>
+      <tr><th>Riga nel file</th><th>Cosa fa</th></tr>
+      <tr><td><code>"registra_testo_digitato": false</code></td><td>Il programma non salva le lettere che digiti: al loro posto mette dei pallini. Il valore normale è <code>true</code>. Utile se scrivi password.</td></tr>
+      <tr><td><code>"tasto_pausa": "f10"</code></td><td>Il tasto per la pausa. Scrivi un altro tasto funzione, per esempio <code>"f8"</code>.</td></tr>
+      <tr><td><code>"tasto_fine": "f9"</code></td><td>Il tasto per finire la registrazione, come sopra.</td></tr>
+    </table>
+    <div class="nota"><p>Cambia solo quello che serve e non togliere virgolette, virgole o parentesi. Se il file si rovina, il programma lo mette da parte e riparte con le impostazioni normali.</p></div>
   </div>
 </article>
 
 <article class="passo" id="file">
-  <div class="n">10</div>
+  <div class="n">11</div>
   <div class="cont">
     <h2>File creati e pulizia automatica</h2>
-    <p>Ogni progetto contiene <code>index.html</code>, <code>passi.json</code> e la cartella <code>immagini/</code>. Niente viene mai sovrascritto: se un nome esiste già, il programma aggiunge <code>_2</code>, <code>_3</code>…</p>
-    <p>Nella cartella <code>backup cancellati</code> c'è anche <code>indice.json</code>, l'elenco usato da Impostazioni.</p>
-    <p>Il programma toglie da solo i file <code>.tmp</code> lasciati da una chiusura anomala, le vecchie cartelle di estrazione in <code>Temp</code> e i report sul Desktop più vecchi di 14 giorni.</p>
+    <p>Ogni progetto è una cartella con la pagina <code>index.html</code>, la cartella <code>immagini/</code> con gli screenshot e un file con i dati dei passi. Per spostare o mandare un progetto, usa tutta la cartella oppure il <a href="#pagina-html">file unico</a>.</p>
+    <p>Niente viene mai sovrascritto: se un nome esiste già, il programma aggiunge <code>_2</code>, <code>_3</code>…</p>
+    <p>Il programma si pulisce da solo: non lascia file temporanei in giro e toglie dal Desktop i report di segnalazione dopo 14 giorni.</p>
   </div>
 </article>
 
 <article class="passo" id="da-sapere">
-  <div class="n">11</div>
+  <div class="n">12</div>
   <div class="cont">
     <h2>Cose utili da sapere</h2>
     <ul>
-      <li><strong>Password:</strong> tutto ciò che scrivi viene salvato. Metti in pausa con <kbd>F10</kbd> quando le inserisci, oppure imposta <code>"registra_testo_digitato": false</code> in <code>config.json</code> per sostituire le lettere con dei pallini.</li>
+      <li><strong>Password:</strong> tutto quello che scrivi viene registrato, password comprese. Prima di digitarla premi <kbd>F10</kbd> per mettere in pausa, poi <kbd>F10</kbd> di nuovo per riprendere. Se vuoi che le lettere non vengano mai salvate (compaiono dei pallini), vedi <a href="#avanzate">Impostazioni avanzate</a>.</li>
       <li><strong>Programmi come amministratore:</strong> per registrarli avvia anche <code>RegistratoreAzioni.exe</code> come amministratore.</li>
       <li><strong>Più monitor:</strong> viene catturato solo lo schermo in cui si trova il cursore.</li>
-      <li><strong>OneDrive:</strong> se salvi in una cartella sincronizzata in tempo reale e vedi errori di scrittura su <code>passi.json</code>, usa una cartella locale come <code>C:\Progetti</code>.</li>
+      <li><strong>OneDrive:</strong> se salvi in una cartella sincronizzata in tempo reale e vedi errori di salvataggio, scegli una cartella solo sul tuo PC, per esempio <code>C:\Progetti</code>.</li>
       <li><strong>Privacy:</strong> tutti i dati restano sul tuo PC e non viene inviato nulla. Usa il programma solo sul tuo PC o con il consenso di chi lo usa.</li>
     </ul>
   </div>
 </article>
 
 <article class="passo" id="segnalazioni">
-  <div class="n">12</div>
+  <div class="n">13</div>
   <div class="cont">
     <h2>Open source e segnalazioni</h2>
     <p>Registratore Azioni è open source (licenza MIT). Se trovi un errore o hai un'idea, premi <strong>Segnala</strong> nella schermata iniziale: crea sul Desktop un report tecnico, senza screenshot né testo digitato, che puoi leggere prima di inviarlo. Allegalo a una mail con due righe su cosa stavi facendo.</p>
