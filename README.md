@@ -73,7 +73,7 @@ pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules 
 ```
 
 ## Impostazioni
-Cartella dei progetti, tema e nascondere la barra dagli screenshot si cambiano da **Impostazioni** dentro il programma.
+Cartella dei progetti, tema, nascondere la barra dagli screenshot e **Testo digitato** (se lo spegni compare un avviso: restano solo pallini al posto delle lettere) si cambiano da **Impostazioni** dentro il programma.
 Il file `%APPDATA%\RegistratoreAzioni\config.json` contiene anche le qualità, i tasti (`tasto_pausa`, `tasto_fine`),
 la pausa che chiude un passo di testo (`pausa_digitazione_sec`), `registra_testo_digitato`, `nascondi_barra`, il tema e la compressione (`jpeg_motore`, `moz_qualita`, `moz_scala`, `moz_444`).
 
