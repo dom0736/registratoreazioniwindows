@@ -22,7 +22,6 @@ import re
 import shutil
 import sys
 import subprocess
-import tempfile
 import threading
 import time
 import urllib.parse
@@ -41,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "1.9.5"
+VERSION = "2.0"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -155,6 +154,20 @@ def scrivi_testo_atomico(path: Path, testo: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     try:
         tmp.write_text(testo, encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def scrivi_bytes_atomico(path: Path, dati: bytes) -> None:
+    """Come scrivi_testo_atomico, ma per i byte (immagini); se qualcosa va storto il temporaneo non resta."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_bytes(dati)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -289,27 +302,23 @@ def modalita_attive(cfg: dict) -> dict:
 
 
 def _jpeg_con_cjpeg(img, q: int, sub444: bool):
-    """Comprime con cjpeg (mozjpeg). Restituisce i byte del JPEG, oppure None se qualcosa va storto."""
+    """Comprime con cjpeg (mozjpeg) passando l'immagine da stdin e leggendo il JPEG da stdout,
+    senza file temporanei. Restituisce i byte del JPEG, oppure None se qualcosa va storto."""
     exe = cjpeg_percorso()
     if exe is None:
         return None
-    tmp_in = tmp_out = None
     try:
-        fd, tmp_in = tempfile.mkstemp(suffix=".bmp", prefix="reg_")
-        os.close(fd)
-        fd, tmp_out = tempfile.mkstemp(suffix=".jpg", prefix="reg_")
-        os.close(fd)
-        img.convert("RGB").save(tmp_in, format="BMP")
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="PPM")  # PPM: cjpeg lo legge senza decodifiche
         cmd = [str(exe), "-quality", str(q)]
         if sub444:
             cmd += ["-sample", "1x1"]
-        cmd += ["-outfile", tmp_out, tmp_in]
-        r = subprocess.run(cmd, capture_output=True, timeout=CJPEG_TIMEOUT,
+        r = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=CJPEG_TIMEOUT,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if r.returncode != 0:
             _log.error("cjpeg ha restituito %s: %s", r.returncode, r.stderr[-300:])
             return None
-        dati = Path(tmp_out).read_bytes()
+        dati = r.stdout
         if len(dati) < 4 or dati[:2] != b"\xff\xd8":
             _log.error("cjpeg ha prodotto un file non valido")
             return None
@@ -317,13 +326,6 @@ def _jpeg_con_cjpeg(img, q: int, sub444: bool):
     except Exception:
         _log.exception("Errore con cjpeg")
         return None
-    finally:
-        for t in (tmp_in, tmp_out):
-            if t:
-                try:
-                    os.unlink(t)
-                except OSError:
-                    pass
 
 
 def codifica_immagine(img, fmt: str, q: int, sub444: bool = False):
@@ -1161,6 +1163,9 @@ class Registratore:
         if kind == "doppio":
             self._segna_doppio()
             return
+        if kind == "elimina":
+            self._elimina_passo(ev["img"])
+            return
 
         finestra = finestra_attiva()
         if kind in ("click", "drag"):
@@ -1277,11 +1282,41 @@ class Registratore:
                 ImageDraw.Draw(img).rectangle([cx - r, cy - r, cx + r, cy + r],
                                               outline=AZIONI["doppio"][1], width=info["spessore"])
                 dati, _ = codifica_immagine(img, info["fmt"], info["q"], info.get("sub444", False))
-                Path(info["path"]).write_bytes(dati)
+                scrivi_bytes_atomico(Path(info["path"]), dati)
             except Exception as e:
                 self.errori.append(repr(e))
                 _log.exception("Errore nel disegnare il doppio clic")
         self._salva_json()
+
+    # ---- eliminare un passo mentre si registra ----
+    def eliminabile(self, st) -> bool:
+        """Si possono togliere solo i passi di questa sessione: quelli di una ripresa precedente no."""
+        img = st.get("img") or ""
+        return bool(img) and st.get("tipo") != "ripresa" and Path(img).name not in self.immagini_prima
+
+    def chiedi_elimina(self, img: str):
+        """Dalla barretta: il lavoro lo fa il thread che salva i passi, così non si pestano i piedi."""
+        self.q.put({"kind": "elimina", "img": img})
+
+    def _elimina_passo(self, img: str):
+        st = next((x for x in self.steps if x.get("img") == img and self.eliminabile(x)), None)
+        if st is None:
+            return  # già tolto (doppio clic sulla ×) o passo di una ripresa precedente
+        if self.ultimo_box and self.ultimo_box["step"] is st:
+            self.ultimo_box = None
+        self.steps = [x for x in self.steps if x is not st]
+        try:
+            (self.dir / img).unlink()
+        except OSError as e:
+            self.errori.append(repr(e))
+            _log.exception("Non riesco a togliere l'immagine del passo eliminato")
+        k = 0
+        for x in self.steps:  # i numeri restano consecutivi
+            if x.get("tipo") != "ripresa":
+                k += 1
+                x["n"] = k
+        self._salva_json()
+        self.scrivi_html()
 
     # ---- salvataggi ----
     def _salva_json(self):
@@ -1366,6 +1401,8 @@ img.s{width:100%;height:auto;display:block;border-radius:14px;border:1px solid v
 .op{position:absolute;top:10px;right:10px;width:34px;height:34px;opacity:0;transition:opacity .12s;
   background:var(--campo);box-shadow:0 4px 14px rgba(0,0,0,.3)}
 .op svg{width:17px;height:17px}
+.op.dl{right:52px}
+.op.dl:hover{color:#e11d3f}
 figure:hover .op{opacity:1}
 @media (hover:none){.op{opacity:1}}
 #sb{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;
@@ -1475,10 +1512,11 @@ __LOGO__
 <div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
 <button class="ib" id="btema" type="button"></button>
+<button class="ib" id="bunico" type="button" title="Esporta come file unico (immagini incluse): comodo da mandare"></button>
 <button class="ib" id="bpdf" type="button" title="Stampa e salva (Ctrl+P)"></button>
 </div>
 </header>
-<p class="hint">Clicca sul titolo o su una descrizione per modificarla: la copia si salva in una nuova cartella «_modificato».</p>
+<p class="hint">Clicca sul titolo o su una descrizione per modificarla, o sul cestino di un'immagine per togliere il passo: la copia si salva in una nuova cartella «_modificato».</p>
 <div id="lista"></div>
 </div>
 
@@ -1541,13 +1579,30 @@ const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,'0');
 let cur=-1;
 const base={titolo:D.titolo,testi:D.passi.map(p=>p.testo)};
+/* passi tolti dalla pagina: l'originale non cambia finché non salvi la copia; «Annulla» li rimette */
+const eliminati=[];
+const inizio={passi:[],testi:[],n:[]};
+function snapshot(){inizio.passi=D.passi.slice();inizio.testi=base.testi.slice();inizio.n=D.passi.map(p=>p.n);eliminati.length=0;}
+snapshot();
+function rinumera(){let k=0;D.passi.forEach(p=>{if(p.tipo!=='ripresa')p.n=++k;});}
+function elimina(i){
+  const p=D.passi[i];
+  if(!p||p.tipo==='ripresa')return;
+  eliminati.push(p);
+  D.passi.splice(i,1);base.testi.splice(i,1);
+  rinumera();
+  SEL.clear();selInit=false;   /* la selezione per la stampa si rifà da capo */
+  render();aggiorna();
+}
 
 /* ---- icone ---- */
 const ICONE={
   sole:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   luna:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   pdf:'<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
-  apri:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'
+  apri:'<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  cestino:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>',
+  unico:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/>'
 };
 const svg=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONE[n]+'</svg>';
 
@@ -1616,7 +1671,10 @@ function render(){
     const im=document.createElement('img');im.className='s';im.loading='lazy';im.src=p.img;im.alt='Passo '+p.n;
     im.addEventListener('click',()=>apriLb(i));
     const o=document.createElement('a');o.className='ib op';o.href=p.img;o.target='_blank';o.title="Apri l'immagine da sola";o.innerHTML=svg('apri');
-    f.append(im,o);c.append(d,m,f);a.append(n,c);L.append(a);
+    o.addEventListener('click',e=>{if(p.img.startsWith('data:')){e.preventDefault();apriBlob(p.img);}});
+    const x=document.createElement('button');x.type='button';x.className='ib op dl';x.title='Elimina questo passo';x.innerHTML=svg('cestino');
+    x.addEventListener('click',()=>elimina(i));
+    f.append(im,o,x);c.append(d,m,f);a.append(n,c);L.append(a);
   });
   if(!D.passi.length)L.textContent='Nessun passo registrato.';
 }
@@ -1624,7 +1682,7 @@ function render(){
 /* ---- barra «Salva copia» ---- */
 let nota='',occupato=false,timerNota=0;
 function modifiche(){
-  let n=D.passi.filter((p,i)=>p.testo!==base.testi[i]).length;
+  let n=D.passi.filter((p,i)=>p.testo!==base.testi[i]).length+eliminati.length;
   if(D.titolo!==base.titolo)n++;
   return n;
 }
@@ -1642,7 +1700,11 @@ function avviso(t,ms){
   if(ms)timerNota=setTimeout(()=>{nota='';aggiorna();},ms);
 }
 $('#bann').onclick=()=>{
-  D.titolo=base.titolo;D.passi.forEach((p,i)=>{p.testo=base.testi[i];});
+  D.titolo=base.titolo;
+  D.passi.length=0;inizio.passi.forEach((p,k)=>{p.n=inizio.n[k];D.passi.push(p);});
+  base.testi=inizio.testi.slice();
+  D.passi.forEach((p,i)=>{p.testo=base.testi[i];});
+  eliminati.length=0;SEL.clear();selInit=false;
   render();aggiorna();
 };
 window.addEventListener('beforeunload',e=>{if(modifiche()>0){e.preventDefault();e.returnValue='';}});
@@ -1667,6 +1729,7 @@ async function scrivi(dir,nome,contenuto){
 }
 async function salva(){
   if(occupato||!modifiche())return;
+  if(gia_unico()){avviso('Questo è un file unico: per fare una copia modificata apri index.html dalla cartella del progetto.',9000);return;}
   if(!window.showDirectoryPicker){avviso('Per salvare la copia serve Microsoft Edge o Google Chrome.',9000);return;}
   let radice;
   try{radice=await window.showDirectoryPicker({id:'registratore-azioni',mode:'readwrite',startIn:'documents'});}
@@ -1693,7 +1756,8 @@ async function salva(){
     const sorg=await src.getDirectoryHandle('immagini');
     const dimm=await dest.getDirectoryHandle('immagini',{create:true});
     const file=[];
-    for await(const [n,h] of sorg.entries())if(h.kind==='file')file.push([n,h]);
+    const tolte=new Set(eliminati.map(p=>p.img.split('/').pop()));   /* gli screenshot dei passi eliminati non vanno nella copia */
+    for await(const [n,h] of sorg.entries())if(h.kind==='file'&&!tolte.has(n))file.push([n,h]);
     let fatti=0;
     for(const [n,h] of file){
       avviso('Copio le immagini '+(++fatti)+' / '+file.length+'…');
@@ -1709,19 +1773,13 @@ async function salva(){
     const dati={progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi};
     await scrivi(dest,'passi.json',JSON.stringify(dati,null,2));
 
-    const LT='<';  /* spezzo le etichette HTML: dentro uno script il browser le leggerebbe come vere */
-    const blocco=LT+'!--DATI-->'+LT+'script id="dati" type="application/json">'+
-      JSON.stringify({progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi}).replace(/</g,'\\u003c')+
-      LT+'/script>'+LT+'!--/DATI-->';
-    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    let html=await testoDi(src,'index.html');
-    html=html.replace(new RegExp(LT+'!--DATI-->[\\s\\S]*?'+LT+'!--/DATI-->'),()=>blocco)
-             .replace(/<title>[\s\S]*?<\/title>/,()=>'<title>'+esc(D.titolo)+'</title>');
+    const html=paginaConDati(await testoDi(src,'index.html'),nome,passi);
     await scrivi(dest,'index.html',html);
 
     creata='';
     base.titolo=D.titolo;base.testi=D.passi.map(p=>p.testo);
     D.passi.forEach((p,i)=>{if(passi[i].testo_originale)p.testo_originale=passi[i].testo_originale;});
+    snapshot();
     occupato=false;
     render();
     avviso('✓ Creata la cartella «'+nome+'». L\'originale non è cambiato.',10000);
@@ -1733,6 +1791,87 @@ async function salva(){
 }
 $('#bsal').onclick=salva;
 
+/* inserisce i dati (e il titolo) nella pagina index.html di un progetto */
+function paginaConDati(html,nome,passi){
+    const LT='<';  /* spezzo le etichette HTML: dentro uno script il browser le leggerebbe come vere */
+    const blocco=LT+'!--DATI-->'+LT+'script id="dati" type="application/json">'+
+      JSON.stringify({progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi}).replace(/</g,'\\u003c')+
+      LT+'/script>'+LT+'!--/DATI-->';
+    const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return html.replace(new RegExp(LT+'!--DATI-->[\\s\\S]*?'+LT+'!--/DATI-->'),()=>blocco)
+             .replace(/<title>[\s\S]*?<\/title>/,()=>'<title>'+esc(D.titolo)+'</title>');
+}
+
+/* ---- esporta come file unico: le immagini finiscono dentro la pagina ---- */
+const MIME={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp'};
+const gia_unico=()=>D.passi.some(p=>p.img&&p.img.startsWith('data:'));
+function inBase64(file){
+  return new Promise((ok,ko)=>{
+    const r=new FileReader();
+    r.onload=()=>ok(String(r.result).split(',')[1]);
+    r.onerror=()=>ko(r.error);
+    r.readAsDataURL(file);
+  });
+}
+function apriBlob(u){fetch(u).then(r=>r.blob()).then(b=>window.open(URL.createObjectURL(b),'_blank')).catch(()=>{});}
+async function fileEsiste(dir,nome){
+  try{await dir.getFileHandle(nome);return true;}
+  catch(e){if(e.name==='NotFoundError')return false;if(e.name==='TypeMismatchError')return true;throw e;}
+}
+async function esportaUnico(){
+  if(occupato)return;
+  if(gia_unico()){avviso('Questo è già un file unico.',6000);return;}
+  if(!window.showDirectoryPicker){avviso('Per esportare serve Microsoft Edge o Google Chrome.',9000);return;}
+  let radice;
+  try{radice=await window.showDirectoryPicker({id:'registratore-azioni',mode:'readwrite',startIn:'documents'});}
+  catch(e){
+    if(e.name==='AbortError')return;
+    avviso(e.name==='SecurityError'
+      ?'Il browser non permette quella cartella: scegli la cartella dei progetti (non Documenti o Desktop).'
+      :'Non riesco ad aprire la cartella: '+e.message,9000);
+    return;
+  }
+  occupato=true;aggiorna();
+  let creato='';
+  try{
+    const orig=nomeCartella();
+    let src;
+    try{src=await radice.getDirectoryHandle(orig);}
+    catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'», non il progetto stesso');}
+    const sorg=await src.getDirectoryHandle('immagini');
+    const passi=[];let fatti=0;const tot=reali();
+    for(const p of D.passi){
+      const q=Object.assign({},p);
+      if(p.tipo!=='ripresa'&&p.img){
+        avviso('Incorporo le immagini '+(++fatti)+' / '+tot+'…');
+        const nomeImg=p.img.split('/').pop();
+        const f=await (await sorg.getFileHandle(nomeImg)).getFile();
+        const ext=nomeImg.split('.').pop().toLowerCase();
+        q.img='data:'+(MIME[ext]||f.type||'image/jpeg')+';base64,'+await inBase64(f);
+      }
+      passi.push(q);
+    }
+    let html=paginaConDati(await testoDi(src,'index.html'),orig,passi);
+    const radiceNome=orig.replace(/_modificato(_\d+)?$/,'')+'_unico';
+    let nome=radiceNome+'.html',k=2;
+    while(await fileEsiste(radice,nome))nome=radiceNome+'_'+(k++)+'.html';
+    creato=nome;
+    await scrivi(radice,nome,html);
+    creato='';
+    occupato=false;
+    const mb=(html.length/1048576).toFixed(1).replace('.',',');
+    avviso('✓ Creato «'+nome+'» ('+mb+' MB) nella cartella scelta. Si apre da solo, senza la cartella immagini.',12000);
+  }catch(e){
+    occupato=false;
+    if(creato){try{await radice.removeEntry(creato);}catch(_){}}
+    avviso('Non sono riuscito a esportare: '+e.message,12000);
+  }
+}
+$('#bunico').innerHTML=svg('unico');
+$('#bunico').onclick=esportaUnico;
+if(gia_unico())$('#bunico').style.display='none';   /* è già un file unico */
+
+
 /* ---- lettore immagini ---- */
 function apriLb(i){
   cur=i;const p=D.passi[i];
@@ -1743,6 +1882,7 @@ function apriLb(i){
 function chiudiLb(){$('#lb').hidden=true;$('#lbi').src='';document.body.style.overflow='';cur=-1;}
 function vai(d){let n=cur+d;while(n>=0&&n<D.passi.length&&D.passi[n].tipo==='ripresa')n+=d;if(n>=0&&n<D.passi.length)apriLb(n);}
 $('#lbo').innerHTML=svg('apri');$('#lbo').firstChild.style.cssText='width:20px;height:20px';
+$('#lbo').addEventListener('click',e=>{const p=D.passi[cur];if(p&&p.img.startsWith('data:')){e.preventDefault();apriBlob(p.img);}});
 $('#lbx').onclick=chiudiLb;
 $('#lbp').onclick=()=>vai(-1);
 $('#lbn').onclick=()=>vai(1);
@@ -1908,7 +2048,7 @@ function esportaMd(){
     if(rip){r.push('_'+rip+'_','');rip=null;}
     r.push('## '+pad(p.n)+(S.descr?'. '+p.testo.replace(/\s+/g,' '):''));
     if(S.meta)r.push(p.ora+(p.finestra?' · '+p.finestra:''));
-    if(S.shot)r.push('','![Passo '+p.n+']('+p.img+')');
+    if(S.shot&&!p.img.startsWith('data:'))r.push('','![Passo '+p.n+']('+p.img+')');
     r.push('');
   });
   const a=document.createElement('a');
@@ -2358,6 +2498,7 @@ class App:
             except Exception:
                 pass
         self._widgets, self._refs = [], []
+        self._barre, self._barra_att = [], None
         for ev in ("<Return>", "<Escape>"):
             self.root.unbind(ev)
         try:
@@ -3008,7 +3149,7 @@ class App:
         if d:
             self.cfg["cartella_radice"] = str(Path(d))
             salva_config(self.cfg)
-            self.cv.itemconfig(self.t_root, text=self._ellissi(self.cfg["cartella_radice"], 190))
+            self.cv.itemconfig(self.t_root, text=self._ellissi(self.cfg["cartella_radice"], 240))
 
     # ---- guida (si apre nel browser; F1 solo prima della registrazione) ----
     def _guida(self, _e=None, ancora: str = ""):
@@ -3264,6 +3405,7 @@ class App:
         self._firma_passi = firma
         c = self.c
         self.cv.delete("lista")
+        self.cv.config(cursor="")  # se il mouse stava su una × che sparisce, il cursore non resta a manina
         x0, w_testo = 16, BARRA_LARGA - 32
         y = 46
 
@@ -3293,9 +3435,21 @@ class App:
             col = _hex(AZIONI.get(st.get("az"), AZIONI["tasto"])[1])
             nuovo(self.cv.create_oval(self._px(x0), self._px(y + 5), self._px(x0 + 8), self._px(y + 13),
                                       fill=col, width=0))
-            nuovo(self._testo(x0 + 16, y, taglia(f"{st.get('n')}.  {st.get('testo', '')}", f1, w_testo - 16), FONT_SB))
-            nuovo(self._testo(x0 + 16, y + 16, taglia(st.get("finestra") or "", f2, w_testo - 16), FONT_S, c["mut"]))
+            nuovo(self._testo(x0 + 16, y, taglia(f"{st.get('n')}.  {st.get('testo', '')}", f1, w_testo - 38), FONT_SB))
+            nuovo(self._testo(x0 + 16, y + 16, taglia(st.get("finestra") or "", f2, w_testo - 38), FONT_S, c["mut"]))
+            if self.rec.eliminabile(st):
+                self._x_elimina(BARRA_LARGA - 22, y + 10, st["img"])
             y += PASSI_RIGA
+
+    def _x_elimina(self, x, y, img):
+        """Piccola × accanto a un passo: lo toglie subito (con il suo screenshot)."""
+        c = self.c
+        t = self._testo(x, y, "×", FONT_B, c["mut"], anchor="center")
+        self.cv.addtag_withtag("lista", t)  # niente tag «drag»: un clic qui non trascina la barretta
+        self._mani((t,),
+                   entra=lambda _e: (self.cv.itemconfig(t, fill=c["rec"]), self.cv.config(cursor="hand2")),
+                   esce=lambda _e: (self.cv.itemconfig(t, fill=c["mut"]), self.cv.config(cursor="")),
+                   click=lambda _e: self.rec and self.rec.chiedi_elimina(img))
 
     def _drag_inizio(self, e):
         self._dx, self._dy = e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y()
