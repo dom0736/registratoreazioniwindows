@@ -1,327 +1,342 @@
 <!doctype html>
-<html lang="it" data-tema="chiaro">
+<html lang="it" data-tema="scuro">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="data:image/png;base64,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">
-<title>Guida · Registratore Azioni 2.0</title>
+<title>Guida · Registratore Azioni 2.1</title>
 <style>
-:root,:root[data-tema=chiaro]{
-  color-scheme:light;
-  --bg:#ffffff;--fg:#1c2333;--mut:#5d6879;--linea:#dfe3ea;--sfondo2:#f4f6fa;
-  --a:#2a55e0;--a-bg:#eaf0ff;--code-bg:#f1f3f8;--code-b:#d6dbe6
-}
-:root[data-tema=scuro]{
+:root,:root[data-tema=scuro]{
   color-scheme:dark;
-  --bg:#171d29;--fg:#e8ecf3;--mut:#9aa5ba;--linea:#2c3649;--sfondo2:#1e2634;
-  --a:#7a9bff;--a-bg:#222c44;--code-bg:#222b3b;--code-b:#34405a
-}
+  --fg:#f4f7fb;--mut:#a9b8cf;--card:rgba(255,255,255,.07);--cb:rgba(255,255,255,.13);
+  --vetro:rgba(255,255,255,.11);--vetro-h:rgba(255,255,255,.2);--campo:#1c2636;--sel:rgba(193,58,242,.2);
+  --a1:#3d6fff;--a2:#c13af2;--az:#3d6fff;
+  --bg:linear-gradient(160deg,#18212e 0%,#223044 55%,#2c3b52 100%);
+  --glow1:rgba(14,70,254,.5);--glow2:rgba(127,66,247,.32);--sh:0 10px 30px rgba(0,0,0,.25)}
+:root[data-tema=chiaro]{
+  color-scheme:light;
+  --fg:#1b2740;--mut:#5b6b88;--card:rgba(255,255,255,.72);--cb:rgba(255,255,255,.95);
+  --vetro:rgba(49,65,84,.1);--vetro-h:rgba(49,65,84,.2);--campo:#ffffff;--sel:rgba(176,47,224,.14);
+  --a1:#1f55ff;--a2:#b02fe0;--az:#1f55ff;
+  --bg:linear-gradient(160deg,#f5f7fb 0%,#e6ebf6 55%,#d4daf2 100%);
+  --glow1:rgba(31,85,255,.16);--glow2:rgba(127,66,247,.22);--sh:0 10px 30px rgba(40,50,90,.12)}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
-:focus-visible{outline:2px solid var(--a);outline-offset:2px;border-radius:3px}
-a{color:var(--a)}
+body{margin:0;min-height:100vh;color:var(--fg);font:15px/1.55 "Segoe UI",system-ui,sans-serif;
+  background:radial-gradient(60% 50% at 0% 100%,var(--glow1),transparent 70%),
+             radial-gradient(55% 45% at 100% 0%,var(--glow2),transparent 70%),var(--bg);
+  background-attachment:fixed}
+:focus-visible{outline:2px solid var(--a1);outline-offset:2px}
+.wrap{max-width:880px;margin:0 auto;padding:26px 18px 70px}
 
-/* ---- barra in alto ---- */
-.barra{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--linea)}
-.barra-in{max-width:1040px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:16px}
-.marchio{display:flex;align-items:center;gap:10px;font-weight:600;white-space:nowrap}
-.marchio svg{width:26px;height:26px;flex:none}
-.marchio small{font-weight:400;color:var(--mut);font-size:.85rem}
-.cerca{position:relative;flex:1;max-width:340px;margin-left:auto}
-.cerca input{width:100%;padding:7px 12px 7px 34px;border:1px solid var(--linea);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;font-size:.92rem}
-.cerca input:focus{outline:none;border-color:var(--a)}
-.cerca svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--mut);pointer-events:none}
-.ib{width:34px;height:34px;border:1px solid var(--linea);border-radius:6px;background:var(--bg);color:var(--fg);display:grid;place-items:center;cursor:pointer;padding:0}
-.ib:hover{background:var(--sfondo2)}
-.ib svg{width:17px;height:17px}
+/* intestazione: stessa scheda di vetro delle pagine di registrazione */
+.top{display:flex;gap:14px;align-items:center;padding:16px 18px;border-radius:24px;
+  background:var(--card);border:1px solid var(--cb);box-shadow:var(--sh);backdrop-filter:blur(10px)}
+.logo{width:48px;height:48px;border-radius:14px;object-fit:contain;flex:none}
+.tit{min-width:0;flex:1}
+h1{margin:0;font-size:1.4rem;line-height:1.25;letter-spacing:-.01em}
+#sub{color:var(--mut);font-size:.8rem;margin-top:2px}
+.tools{display:flex;gap:8px;flex:none}
+.ib{width:40px;height:40px;border-radius:50%;border:1px solid var(--cb);background:var(--vetro);color:var(--fg);
+  display:grid;place-items:center;cursor:pointer;text-decoration:none;padding:0;transition:background .12s}
+.ib:hover{background:var(--vetro-h)}
+.ib svg{width:20px;height:20px}
 
-/* ---- impaginazione: indice a sinistra, testo a destra ---- */
-.pagina{max-width:1040px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:210px minmax(0,1fr);gap:56px}
-nav.indice{position:sticky;top:57px;align-self:start;max-height:calc(100vh - 57px);overflow-y:auto;padding:28px 0 28px}
-nav.indice p{margin:18px 0 6px;font-size:.84rem;font-weight:600;color:var(--mut)}
-nav.indice p:first-child{margin-top:0}
-nav.indice a{display:block;padding:4px 0 4px 12px;margin-left:-12px;border-left:2px solid transparent;color:var(--fg);text-decoration:none;font-size:.92rem;line-height:1.4}
-nav.indice a:hover{color:var(--a)}
-nav.indice a.att{border-left-color:var(--a);color:var(--a);font-weight:600}
+.hint{margin:12px 6px 0;color:var(--mut);font-size:.8rem}
 
-main{padding:28px 0 90px;max-width:680px}
-main>header{padding-bottom:22px;margin-bottom:6px;border-bottom:1px solid var(--linea)}
-h1{margin:0 0 6px;font-size:1.9rem;line-height:1.2;font-weight:700}
-.intro{margin:0;color:var(--mut)}
+/* ricerca e salti rapidi */
+.cerca{position:relative;margin-top:16px}
+.cerca input{width:100%;padding:11px 16px 11px 42px;border-radius:999px;border:1px solid var(--cb);
+  background:var(--card);color:var(--fg);font:inherit;box-shadow:var(--sh);backdrop-filter:blur(10px)}
+.cerca input:focus{outline:none;box-shadow:0 0 0 2px var(--a1),var(--sh)}
+.cerca svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--mut);pointer-events:none;z-index:1}
+.salti{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.salti a{padding:6px 14px;border-radius:999px;background:var(--vetro);color:var(--fg);text-decoration:none;
+  font-weight:600;font-size:.82rem;transition:background .12s}
+.salti a:hover{background:var(--vetro-h)}
+.salti a.att{background:linear-gradient(90deg,var(--a1),var(--a2));color:#fff}
 
-section{padding:30px 0 6px;border-bottom:1px solid var(--linea);scroll-margin-top:64px}
-section:last-of-type{border-bottom:0}
-h2{margin:0 0 12px;font-size:1.3rem;line-height:1.3;font-weight:650}
-h3{margin:22px 0 6px;font-size:1.02rem;font-weight:650}
-p{margin:0 0 12px}
-ul,ol{margin:0 0 14px;padding-left:22px}
-li{margin-bottom:6px}
-li::marker{color:var(--mut)}
-section:target h2{color:var(--a)}
-.novita{display:inline-block;margin-left:8px;padding:0 8px;border-radius:4px;background:var(--a-bg);color:var(--a);font-size:.75rem;font-weight:600;vertical-align:middle}
+/* sezioni: una scheda per argomento, come un passo */
+#lista{display:grid;gap:16px;margin-top:18px}
+.passo{display:grid;grid-template-columns:42px 1fr;gap:6px 12px;padding:18px;border-radius:24px;
+  background:var(--card);border:1px solid var(--cb);box-shadow:var(--sh);scroll-margin-top:16px}
+.n{width:34px;height:34px;border-radius:50%;background:var(--az);color:#fff;display:grid;place-items:center;
+  font:600 .85rem Consolas,"Cascadia Mono",monospace}
+.cont{min-width:0}
+h2{margin:4px 0 12px;font-size:1.08rem;line-height:1.35;font-weight:600}
+h3{margin:18px 0 6px;font-size:.95rem;font-weight:600}
+.passo p{margin:0 0 10px}
+.passo ul,.passo ol{margin:0 0 10px;padding-left:20px}
+.passo li{margin-bottom:5px}
+.passo li::marker{color:var(--mut)}
+.passo :last-child{margin-bottom:0}
+.passo:target{box-shadow:0 0 0 2px var(--a1),var(--sh)}
+.nuovo{display:inline-block;margin-left:6px;padding:1px 10px;border-radius:999px;background:var(--sel);
+  font-size:.72rem;font-weight:700;vertical-align:middle}
 
-code,kbd{font:.86em Consolas,"Cascadia Mono",monospace;background:var(--code-bg);border:1px solid var(--code-b);border-radius:4px;padding:1px 5px}
-kbd{box-shadow:0 1px 0 var(--code-b)}
+code,kbd{font:600 .84em Consolas,"Cascadia Mono",monospace;background:var(--vetro);border-radius:6px;padding:1px 6px}
+kbd{box-shadow:0 1px 0 var(--vetro-h)}
+.passo a:not(.bt){color:var(--a1)}
+:root[data-tema=scuro] .passo a:not(.bt){color:#8fb0ff}
 
-.nota{margin:14px 0;padding:10px 14px;border-left:3px solid var(--a);background:var(--sfondo2);font-size:.94rem}
+.nota{margin:12px 0 0;padding:10px 14px;border-radius:14px;background:var(--vetro);font-size:.88rem;color:var(--mut)}
 .nota p{margin:0}
-.attenzione{border-left-color:#d9822b}
+.nota strong{color:var(--fg)}
 
-dl.colori{margin:6px 0 14px;display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:7px;align-items:center}
-dl.colori dt{display:flex;align-items:center;gap:9px;font-weight:600}
-dl.colori dd{margin:0;color:var(--mut)}
-.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.colori{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:0 0 12px}
+.col-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;background:var(--vetro);font-size:.88rem}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
 
-table{border-collapse:collapse;margin:6px 0 14px;width:100%;font-size:.94rem}
-th,td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--linea);vertical-align:top}
-th{font-weight:600;color:var(--mut);font-size:.86rem}
+table{border-collapse:collapse;margin:0 0 10px;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--cb);vertical-align:top}
+th{color:var(--mut);font-weight:600;font-size:.82rem}
 td:first-child{white-space:nowrap}
 
-.mail{display:inline-block;margin-top:2px;padding:8px 16px;border-radius:6px;background:var(--a);color:#fff;text-decoration:none;font-weight:600;font-size:.94rem}
-:root[data-tema=scuro] .mail{color:#10182a}
-.mail:hover{filter:brightness(1.08)}
+.bt{display:inline-block;border:0;border-radius:999px;padding:9px 18px;font:inherit;font-weight:600;font-size:.88rem;
+  cursor:pointer;color:#fff;background:linear-gradient(90deg,var(--a1),var(--a2));text-decoration:none}
+.bt:hover{filter:brightness(1.12)}
+a.bt{color:#fff}
 
-.vuoto{display:none;padding:40px 0;color:var(--mut)}
-footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--linea);color:var(--mut);font-size:.88rem}
+.vuoto{display:none;text-align:center;padding:34px;color:var(--mut)}
+footer{margin-top:26px;text-align:center;color:var(--mut);font-size:.8rem}
 footer a{color:inherit}
 
-@media (max-width:860px){
-  .pagina{grid-template-columns:1fr;gap:0}
-  nav.indice{position:static;max-height:none;padding:18px 0 0;columns:2;column-gap:24px}
-  nav.indice p{break-after:avoid}
-  nav.indice a{break-inside:avoid}
-  .marchio small{display:none}
-  .barra-in{padding:10px 16px}
-  .pagina{padding:0 16px}
+@media (max-width:560px){
+  .top{flex-wrap:wrap}.tools{margin-left:auto}
+  .passo{grid-template-columns:1fr}
+  .n{margin-bottom:2px}
 }
-@media (max-width:480px){
-  nav.indice{columns:1}
-  dl.colori{grid-template-columns:1fr;row-gap:2px}
-  dl.colori dd{margin:0 0 8px 21px}
-}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
 @media print{
-  :root[data-tema]{--bg:#fff;--fg:#000;--mut:#444;--linea:#ccc;--sfondo2:#f4f4f4;--code-bg:#f4f4f4;--a:#000}
-  .barra,nav.indice,.vuoto,.mail{display:none!important}
-  .pagina{display:block;padding:0}
-  main{max-width:none;padding:0}
-  section{break-inside:avoid-page}
+  :root[data-tema]{--fg:#000;--mut:#555;--card:#fff;--cb:#ccc;--sh:none;--vetro:#f1f1f1}
+  body{background:#fff}
+  .tools,.cerca,.salti,.vuoto,.hint,.bt{display:none!important}
+  .top,.passo{backdrop-filter:none;box-shadow:none;break-inside:avoid}
 }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="barra">
-  <div class="barra-in">
-    <div class="marchio">
-      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-        <defs><linearGradient id="g" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0e46fe"/><stop offset="1" stop-color="#f03def"/></linearGradient></defs>
-        <rect x="8" y="8" width="48" height="48" rx="9" fill="url(#g)"/>
-        <rect x="17" y="21" width="30" height="4" rx="2" fill="#fff"/>
-        <rect x="17" y="30" width="20" height="4" rx="2" fill="#fff"/>
-        <rect x="17" y="39" width="12" height="4" rx="2" fill="#fff"/>
-        <circle cx="47" cy="45" r="8" fill="#ff4d5a"/>
-      </svg>
-      <span>Registratore Azioni <small>Guida · versione 2.0</small></span>
-    </div>
-    <div class="cerca">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="search" id="cerca" placeholder="Cerca nella guida" autocomplete="off" aria-label="Cerca nella guida">
-    </div>
+<header class="top">
+  <img class="logo" alt="" src="data:image/png;base64,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">
+  <div class="tit"><h1>Guida</h1><div id="sub">Registratore Azioni · versione 2.1</div></div>
+  <div class="tools">
     <button class="ib" id="btema" type="button" aria-label="Cambia tema"></button>
     <button class="ib" id="bstampa" type="button" title="Stampa la guida (Ctrl+P)" aria-label="Stampa la guida">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
     </button>
   </div>
+</header>
+
+<p class="hint">Registratore Azioni salva uno screenshot a ogni clic e crea una pagina HTML con tutti i passi, da rivedere, correggere e stampare. Cerca una parola o scegli un argomento.</p>
+
+<div class="cerca">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  <input type="search" id="cerca" placeholder="Cerca nella guida" autocomplete="off" aria-label="Cerca nella guida">
 </div>
-
-<div class="pagina">
-
-<nav class="indice" id="indice" aria-label="Indice della guida">
-  <p>Registrare</p>
+<nav class="salti" id="salti" aria-label="Argomenti">
   <a href="#come-si-usa">Come si usa</a>
-  <a href="#programma">Registrare un solo programma</a>
-  <a href="#barretta">La barretta</a>
-  <a href="#colori">Colori dei riquadri</a>
-  <a href="#qualita">Qualità e MozJPEG</a>
-  <p>Dopo la registrazione</p>
-  <a href="#pagina-html">La pagina HTML</a>
-  <a href="#riprendere">Riprendere un progetto</a>
-  <a href="#backup">Annullare e backup</a>
-  <p>Programma e dati</p>
+  <a href="#programma">Un solo programma</a>
+  <a href="#barretta">Barretta</a>
+  <a href="#colori">Colori</a>
+  <a href="#qualita">Qualità</a>
+  <a href="#pagina-html">Pagina HTML</a>
+  <a href="#riprendere">Riprendere</a>
+  <a href="#backup">Backup</a>
   <a href="#impostazioni">Impostazioni</a>
-  <a href="#file">File e pulizia</a>
+  <a href="#file">File</a>
   <a href="#da-sapere">Da sapere</a>
   <a href="#segnalazioni">Segnalazioni</a>
 </nav>
 
-<main id="contenuto">
+<main id="lista">
 
-<header>
-  <h1>Guida</h1>
-  <p class="intro">Registratore Azioni salva uno screenshot a ogni clic e crea una pagina HTML con tutti i passi, pronta da rivedere, correggere e stampare.</p>
-</header>
+<article class="passo" id="come-si-usa">
+  <div class="n">01</div>
+  <div class="cont">
+    <h2>Come si usa</h2>
+    <ol>
+      <li>Scrivi il nome del progetto e premi <strong>Avvia registrazione</strong>.</li>
+      <li>Lavora normalmente. Ogni clic, trascinamento o azione da tastiera salva uno screenshot con un riquadro colorato. La rotellina non conta.</li>
+      <li>Il testo che digiti viene raggruppato: una riga di comando è un solo passo (per esempio <code>show ip route</code> e <kbd>Invio</kbd>).</li>
+      <li>Premi <kbd>F10</kbd> per mettere in pausa o riprendere, <kbd>F9</kbd> per finire. Puoi usare anche i pulsanti della barretta.</li>
+      <li>Con <strong>Fine</strong> la registrazione si ferma ma non si salva ancora: scegli <strong>Salva e apri</strong> per creare la pagina HTML, <strong>Riprendi</strong> per continuare oppure <strong>Annulla</strong>.</li>
+    </ol>
+    <table>
+      <tr><th>Tasto</th><th>Cosa fa</th></tr>
+      <tr><td><kbd>F1</kbd></td><td>Apre questa guida (solo prima di registrare)</td></tr>
+      <tr><td><kbd>F10</kbd></td><td>Pausa e ripresa</td></tr>
+      <tr><td><kbd>F9</kbd></td><td>Fine della registrazione</td></tr>
+    </table>
+    <p>I tasti di pausa e fine si cambiano in <code>config.json</code> (vedi <a href="#impostazioni">Impostazioni</a>).</p>
+  </div>
+</article>
 
-<section id="come-si-usa">
-  <h2>Come si usa</h2>
-  <ol>
-    <li>Scrivi il nome del progetto e premi <strong>Avvia registrazione</strong>.</li>
-    <li>Lavora normalmente. Ogni clic, trascinamento o azione da tastiera salva uno screenshot con un riquadro colorato. La rotellina non conta.</li>
-    <li>Il testo che digiti viene raggruppato: una riga di comando è un solo passo (per esempio <code>show ip route</code> e <kbd>Invio</kbd>).</li>
-    <li>Premi <kbd>F10</kbd> per mettere in pausa o riprendere, <kbd>F9</kbd> per finire. Puoi usare anche i pulsanti della barretta.</li>
-    <li>Con <strong>Fine</strong> la registrazione si ferma ma non si salva ancora: scegli <strong>Salva e apri</strong> per creare la pagina HTML, <strong>Riprendi</strong> per continuare oppure <strong>Annulla</strong>.</li>
-  </ol>
-  <p>Questa guida si apre dal pulsante <strong>Guida</strong> o con <kbd>F1</kbd> nella schermata iniziale. Durante la registrazione non si apre.</p>
-  <table>
-    <tr><th>Tasto</th><th>Cosa fa</th></tr>
-    <tr><td><kbd>F1</kbd></td><td>Apre la guida (solo prima di registrare)</td></tr>
-    <tr><td><kbd>F10</kbd></td><td>Pausa e ripresa</td></tr>
-    <tr><td><kbd>F9</kbd></td><td>Fine della registrazione</td></tr>
-  </table>
-  <p>I tasti di pausa e fine si possono cambiare in <code>config.json</code> (vedi <a href="#impostazioni">Impostazioni</a>).</p>
-</section>
+<article class="passo" id="programma">
+  <div class="n">02</div>
+  <div class="cont">
+    <h2>Registrare un solo programma</h2>
+    <p>In <strong>Cosa registrare</strong> puoi scegliere un programma già aperto. Se l'hai avviato dopo, premi <strong>Aggiorna elenco</strong>.</p>
+    <p>Vengono registrati solo i clic e i tasti fatti su quel programma; il resto viene ignorato. Lo screenshot resta comunque a schermo intero. All'avvio successivo la scelta torna a <em>Tutto lo schermo</em>.</p>
+  </div>
+</article>
 
-<section id="programma">
-  <h2>Registrare un solo programma</h2>
-  <p>In <strong>Cosa registrare</strong> puoi scegliere un programma già aperto. Se l'hai avviato dopo, premi <strong>Aggiorna elenco</strong>.</p>
-  <p>Vengono registrati solo i clic e i tasti fatti su quel programma; il resto viene ignorato. Lo screenshot resta comunque a schermo intero. All'avvio successivo la scelta torna a <em>Tutto lo schermo</em>.</p>
-</section>
+<article class="passo" id="barretta">
+  <div class="n">03</div>
+  <div class="cont">
+    <h2>La barretta di registrazione</h2>
+    <p>Durante la registrazione resta visibile solo una barretta piccola, con il pallino rosso e i pulsanti di pausa e fine. La puoi trascinare dove vuoi e non compare negli screenshot.</p>
+    <h3>Ultimi passi <span class="nuovo">Novità</span></h3>
+    <p>Il pulsante con le tre righette apre l'elenco degli ultimi 5 passi, il più recente in alto, aggiornato a ogni nuovo passo. Premilo di nuovo per chiuderlo.</p>
+    <p>Se hai fatto un clic sbagliato, premi la <strong>×</strong> a destra del passo: il passo e il suo screenshot vengono eliminati e i numeri restano consecutivi.</p>
+    <ul>
+      <li>Funziona solo sui passi della registrazione in corso. I passi di una ripresa precedente non hanno la ×.</li>
+      <li>L'eliminazione è definitiva: lo screenshot non finisce nei backup.</li>
+    </ul>
+  </div>
+</article>
 
-<section id="barretta">
-  <h2>La barretta di registrazione</h2>
-  <p>Durante la registrazione resta visibile solo una barretta piccola. La puoi trascinare dove vuoi e non compare negli screenshot. Ha il pallino rosso della registrazione e i pulsanti di pausa e fine.</p>
+<article class="passo" id="colori">
+  <div class="n">04</div>
+  <div class="cont">
+    <h2>Colori dei riquadri</h2>
+    <div class="colori">
+      <div class="col-item"><span class="dot" style="background:#ef4444"></span><span><strong>Rosso</strong> = clic sinistro</span></div>
+      <div class="col-item"><span class="dot" style="background:#3b82f6"></span><span><strong>Blu</strong> = clic destro</span></div>
+      <div class="col-item"><span class="dot" style="background:#22c55e"></span><span><strong>Verde</strong> = clic centrale</span></div>
+      <div class="col-item"><span class="dot" style="background:#d946ef"></span><span><strong>Viola</strong> = doppio clic (due riquadri)</span></div>
+      <div class="col-item"><span class="dot" style="background:#f59e0b"></span><span><strong>Arancione</strong> = trascinamento</span></div>
+      <div class="col-item"><span class="dot" style="background:#14b8a6"></span><span><strong>Verde acqua</strong> = tastiera (nessun riquadro)</span></div>
+    </div>
+    <div class="nota"><p>Se scorri con la rotellina subito dopo un clic, il riquadro non viene disegnato perché la pagina si è spostata.</p></div>
+  </div>
+</article>
 
-  <h3>Ultimi passi <span class="novita">Novità</span></h3>
-  <p>Il pulsante con le tre righette apre l'elenco degli ultimi 5 passi, con il più recente in alto. Si aggiorna da solo a ogni nuovo passo. Premilo di nuovo per chiuderlo.</p>
-  <p>Se hai fatto un clic sbagliato, premi la <strong>×</strong> a destra del passo: il passo e il suo screenshot vengono eliminati e i numeri restano consecutivi.</p>
-  <ul>
-    <li>Funziona solo sui passi della registrazione in corso. I passi di una ripresa precedente non hanno la ×.</li>
-    <li>L'eliminazione è definitiva: lo screenshot non finisce nei backup.</li>
-  </ul>
-</section>
+<article class="passo" id="qualita">
+  <div class="n">05</div>
+  <div class="cont">
+    <h2>Qualità degli screenshot e MozJPEG</h2>
+    <p>Ci sono quattro profili: <strong>Minima, Leggera, Normale, Nitida</strong>. <em>Normale</em> va bene quasi sempre.</p>
+    <p>In <strong>Impostazioni → Compressione</strong> puoi attivare <strong>MozJPEG</strong>: immagini molto più leggere a parità di nitidezza, con due cursori per qualità e dimensione. Con MozJPEG attivo, nella schermata iniziale restano solo <strong>Minima</strong> e <strong>MozJPEG</strong>.</p>
+    <div class="nota"><p>Per leggere bene anche i testi piccoli usa <strong>Dimensione 100%</strong>, <strong>Qualità 25–30</strong> e <strong>4:4:4</strong>, che mantiene nitidi i bordi colorati. Se <code>cjpeg</code> manca o fallisce, il programma usa da solo il metodo standard e non perdi nessuno screenshot.</p></div>
+  </div>
+</article>
 
-<section id="colori">
-  <h2>Colori dei riquadri</h2>
-  <p>Il riquadro attorno al punto cliccato cambia colore secondo l'azione.</p>
-  <dl class="colori">
-    <dt><span class="dot" style="background:#ef4444"></span>Rosso</dt><dd>clic sinistro</dd>
-    <dt><span class="dot" style="background:#3b82f6"></span>Blu</dt><dd>clic destro</dd>
-    <dt><span class="dot" style="background:#22c55e"></span>Verde</dt><dd>clic centrale</dd>
-    <dt><span class="dot" style="background:#d946ef"></span>Viola</dt><dd>doppio clic (due riquadri)</dd>
-    <dt><span class="dot" style="background:#f59e0b"></span>Arancione</dt><dd>trascinamento</dd>
-    <dt><span class="dot" style="background:#14b8a6"></span>Verde acqua</dt><dd>tastiera (nessun riquadro)</dd>
-  </dl>
-  <div class="nota"><p>Se scorri con la rotellina subito dopo un clic, il riquadro non viene disegnato perché la pagina si è spostata.</p></div>
-</section>
+<article class="passo" id="pagina-html">
+  <div class="n">06</div>
+  <div class="cont">
+    <h2>La pagina HTML</h2>
+    <p>Ogni progetto contiene un <code>index.html</code> con tutti i passi. Aprilo con <strong>Microsoft Edge</strong> o <strong>Google Chrome</strong>: servono per salvare le modifiche.</p>
+    <h3>Modificare i testi</h3>
+    <p>Clicca sul titolo o su una descrizione e scrivi. <kbd>Invio</kbd> conferma, <kbd>Esc</kbd> annulla.</p>
+    <h3>Eliminare un passo <span class="nuovo">Novità</span></h3>
+    <p>Sull'immagine di ogni passo, accanto al pulsante per aprirla, c'è un cestino. Il passo sparisce dalla pagina e i numeri si ricalcolano. <strong>Annulla</strong> rimette a posto anche i passi eliminati. L'originale non cambia finché non premi <strong>Salva copia</strong>.</p>
+    <h3>Salvare una copia</h3>
+    <p><strong>Salva copia</strong> crea la cartella <code>nomeprogetto_modificato</code> accanto all'originale, che resta intatto. Dentro ci sono i tuoi testi e non ci sono i passi eliminati né i loro screenshot. La prima volta il browser chiede di scegliere la cartella che contiene i progetti.</p>
+    <h3>Esportare un file unico <span class="nuovo">Novità</span></h3>
+    <p>Una cartella con <code>index.html</code> e <code>immagini/</code> non si manda come singolo allegato: senza le immagini la pagina risulta vuota. <strong>Esporta file unico</strong>, in alto accanto alla stampante, crea <code>nomeprogetto_unico.html</code> con le immagini incluse.</p>
+    <ul>
+      <li>Include le tue modifiche e lascia fuori i passi eliminati.</li>
+      <li>Non sostituisce la cartella: scegli la cartella dei progetti, come per Salva copia.</li>
+      <li>Alla fine mostra il peso del file. Con molti screenshot può essere grande: MozJPEG aiuta.</li>
+      <li>Nel file unico il pulsante sparisce e <strong>Salva copia</strong> non è disponibile. Per modificare ancora, riapri <code>index.html</code> dalla cartella del progetto.</li>
+    </ul>
+    <h3>Lettore immagini</h3>
+    <p>Clicca su uno screenshot per ingrandirlo. Con <kbd>←</kbd> e <kbd>→</kbd> passi da uno all'altro, con <kbd>Esc</kbd> chiudi.</p>
+    <h3>Stampare e salvare in PDF</h3>
+    <p>L'icona della stampante (o <kbd>Ctrl</kbd>+<kbd>P</kbd>) apre l'anteprima: scegli i passi da includere, il formato (A4 o Letter), l'orientamento, i margini, i passi per pagina e cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco).</p>
+    <p><strong>Stampa / Salva PDF</strong> apre la stampa del browser: scegli «Salva come PDF» come stampante. Dallo stesso pannello puoi scaricare l'elenco dei passi in Markdown; salvalo nella cartella del progetto per mantenere i link alle immagini.</p>
+  </div>
+</article>
 
-<section id="qualita">
-  <h2>Qualità degli screenshot e MozJPEG</h2>
-  <p>Ci sono quattro profili: <strong>Minima, Leggera, Normale, Nitida</strong>. <em>Normale</em> va bene quasi sempre.</p>
-  <p>In <strong>Impostazioni → Compressione</strong> puoi attivare <strong>MozJPEG</strong>: immagini molto più leggere a parità di nitidezza, con due cursori per qualità e dimensione. Con MozJPEG attivo, nella schermata iniziale restano solo <strong>Minima</strong> e <strong>MozJPEG</strong>.</p>
-  <div class="nota"><p>Per leggere bene anche i testi piccoli usa <strong>Dimensione 100%</strong>, <strong>Qualità 25–30</strong> e <strong>4:4:4</strong>, che mantiene nitidi i bordi colorati. Se <code>cjpeg</code> manca o fallisce, il programma usa da solo il metodo standard e non perdi nessuno screenshot.</p></div>
-</section>
+<article class="passo" id="riprendere">
+  <div class="n">07</div>
+  <div class="cont">
+    <h2>Riprendere un progetto</h2>
+    <p>In <strong>Apri un progetto</strong> scegli una registrazione già fatta.</p>
+    <ul>
+      <li><strong>Apri</strong> mostra la pagina HTML del progetto.</li>
+      <li><strong>Riprendi</strong> continua a registrare nello stesso progetto, anche un altro giorno. I nuovi passi vanno in fondo, dopo una riga con data e ora della ripresa.</li>
+    </ul>
+    <p>Se annulli subito la ripresa, il progetto resta com'era.</p>
+  </div>
+</article>
 
-<section id="pagina-html">
-  <h2>La pagina HTML</h2>
-  <p>Ogni progetto contiene un <code>index.html</code> con tutti i passi. Aprilo con <strong>Microsoft Edge</strong> o <strong>Google Chrome</strong>: servono per salvare le modifiche.</p>
+<article class="passo" id="backup">
+  <div class="n">08</div>
+  <div class="cont">
+    <h2>Annullare e gestire i backup</h2>
+    <p>Se premi <strong>Annulla registrazione</strong> la cartella non sparisce: va in <code>backup cancellati</code>, dentro la cartella dei progetti, e puoi recuperarla. Se annulli una ripresa, ci vanno solo i passi di quella ripresa. Una copia di sicurezza finisce lì anche quando un salvataggio va storto.</p>
+    <p>Per vedere tutto apri <strong>Impostazioni → Backup cancellati → Gestisci</strong>. I più recenti sono in alto. Scegli una voce per vedere tipo, passi e peso, poi usa:</p>
+    <ul>
+      <li><strong>Ripristina:</strong> rimette il backup tra i progetti con lo stesso nome, o con <code>_2</code>, <code>_3</code>… se esiste già, e lo toglie dall'elenco. I passi di una ripresa annullata tornano come progetto a parte, con <code>_ripresa</code> nel nome.</li>
+      <li><strong>Apri:</strong> mostra la pagina del backup senza spostare niente (vale anche il doppio clic sulla voce).</li>
+      <li><strong>Elimina:</strong> cancella per sempre, senza passare dal Cestino. Il primo clic chiede conferma, il secondo elimina.</li>
+      <li><strong>Apri cartella:</strong> mostra <code>backup cancellati</code> in Esplora risorse.</li>
+    </ul>
+    <p>Si tengono al massimo 10 backup (5, 10, 20 o 50 da Impostazioni). Quando sono di più, vengono eliminati i più vecchi.</p>
+    <div class="nota"><p>L'elenco è salvato in <code>indice.json</code> e si aggiorna da solo anche se sposti o cancelli una cartella a mano. I backup fatti con le versioni precedenti entrano nell'elenco la prima volta che lo apri.</p></div>
+  </div>
+</article>
 
-  <h3>Modificare i testi</h3>
-  <p>Clicca sul titolo o su una descrizione e scrivi. <kbd>Invio</kbd> conferma, <kbd>Esc</kbd> annulla.</p>
+<article class="passo" id="impostazioni">
+  <div class="n">09</div>
+  <div class="cont">
+    <h2>Impostazioni</h2>
+    <ul>
+      <li><strong>Cartella dei progetti:</strong> dove salvare le registrazioni. Il percorso lungo viene accorciato nella finestra.</li>
+      <li><strong>Tema:</strong> scuro o chiaro, vale anche per le pagine HTML.</li>
+      <li><strong>Nascondi barra:</strong> esclude la barretta dagli screenshot. Funziona su Windows 10 (versione 2004 o successiva) e su Windows 11.</li>
+      <li><strong>Compressione:</strong> Standard o MozJPEG, con qualità e dimensione.</li>
+      <li><strong>Backup da tenere:</strong> quanti conservarne (5, 10, 20 o 50).</li>
+      <li><strong>Backup cancellati:</strong> <strong>Gestisci</strong> apre l'elenco (vedi <a href="#backup">Annullare e gestire i backup</a>).</li>
+    </ul>
+    <p>Se lo schermo è basso, le Impostazioni scorrono con la rotellina o con la barra a destra. I tasti rapidi (<code>tasto_pausa</code>, <code>tasto_fine</code>) e i profili avanzati si trovano in <code>%APPDATA%\RegistratoreAzioni\config.json</code>.</p>
+  </div>
+</article>
 
-  <h3>Eliminare un passo <span class="novita">Novità</span></h3>
-  <p>Sull'immagine di ogni passo, accanto al pulsante per aprirla, c'è un cestino. Il passo sparisce dalla pagina e i numeri si ricalcolano. <strong>Annulla</strong> rimette a posto anche i passi eliminati.</p>
-  <p>L'originale non cambia finché non premi <strong>Salva copia</strong>.</p>
+<article class="passo" id="file">
+  <div class="n">10</div>
+  <div class="cont">
+    <h2>File creati e pulizia automatica</h2>
+    <p>Ogni progetto contiene <code>index.html</code>, <code>passi.json</code> e la cartella <code>immagini/</code>. Niente viene mai sovrascritto: se un nome esiste già, il programma aggiunge <code>_2</code>, <code>_3</code>…</p>
+    <p>Nella cartella <code>backup cancellati</code> c'è anche <code>indice.json</code>, l'elenco usato da Impostazioni.</p>
+    <p>Il programma toglie da solo i file <code>.tmp</code> lasciati da una chiusura anomala, le vecchie cartelle di estrazione in <code>Temp</code> e i report sul Desktop più vecchi di 14 giorni.</p>
+  </div>
+</article>
 
-  <h3>Salvare una copia</h3>
-  <p><strong>Salva copia</strong> crea la cartella <code>nomeprogetto_modificato</code> accanto all'originale, che resta intatto. Dentro ci sono i tuoi testi e non ci sono i passi eliminati, né i loro screenshot. La prima volta il browser chiede di scegliere la cartella che contiene i progetti.</p>
+<article class="passo" id="da-sapere">
+  <div class="n">11</div>
+  <div class="cont">
+    <h2>Cose utili da sapere</h2>
+    <ul>
+      <li><strong>Password:</strong> tutto ciò che scrivi viene salvato. Metti in pausa con <kbd>F10</kbd> quando le inserisci, oppure imposta <code>"registra_testo_digitato": false</code> in <code>config.json</code> per sostituire le lettere con dei pallini.</li>
+      <li><strong>Programmi come amministratore:</strong> per registrarli avvia anche <code>RegistratoreAzioni.exe</code> come amministratore.</li>
+      <li><strong>Più monitor:</strong> viene catturato solo lo schermo in cui si trova il cursore.</li>
+      <li><strong>OneDrive:</strong> se salvi in una cartella sincronizzata in tempo reale e vedi errori di scrittura su <code>passi.json</code>, usa una cartella locale come <code>C:\Progetti</code>.</li>
+      <li><strong>Privacy:</strong> tutti i dati restano sul tuo PC e non viene inviato nulla. Usa il programma solo sul tuo PC o con il consenso di chi lo usa.</li>
+    </ul>
+  </div>
+</article>
 
-  <h3>Esportare un file unico <span class="novita">Novità</span></h3>
-  <p>Una cartella con <code>index.html</code> e <code>immagini/</code> non si può mandare come singolo allegato: senza le immagini la pagina risulta vuota. Il pulsante <strong>Esporta file unico</strong>, in alto accanto alla stampante, crea <code>nomeprogetto_unico.html</code> con le immagini incluse.</p>
-  <ul>
-    <li>Include le tue modifiche e lascia fuori i passi eliminati.</li>
-    <li>Non sostituisce la cartella: scegli la cartella dei progetti, come per Salva copia.</li>
-    <li>Alla fine mostra il peso del file. Con molti screenshot può essere grande: MozJPEG aiuta.</li>
-    <li>Nel file unico il pulsante sparisce e <strong>Salva copia</strong> non è disponibile. Per modificare ancora, riapri <code>index.html</code> dalla cartella del progetto.</li>
-  </ul>
+<article class="passo" id="segnalazioni">
+  <div class="n">12</div>
+  <div class="cont">
+    <h2>Open source e segnalazioni</h2>
+    <p>Registratore Azioni è open source (licenza MIT). Se trovi un errore o hai un'idea, premi <strong>Segnala</strong> nella schermata iniziale: crea sul Desktop un report tecnico, senza screenshot né testo digitato, che puoi leggere prima di inviarlo. Allegalo a una mail con due righe su cosa stavi facendo.</p>
+    <a class="bt" href="mailto:domenico.castaldod29@gmail.com?subject=Segnalazione%20Registratore%20Azioni%202.1">domenico.castaldod29@gmail.com</a>
+  </div>
+</article>
 
-  <h3>Lettore immagini</h3>
-  <p>Clicca su uno screenshot per ingrandirlo. Con <kbd>←</kbd> e <kbd>→</kbd> passi da uno all'altro, con <kbd>Esc</kbd> chiudi.</p>
-
-  <h3>Stampare e salvare in PDF</h3>
-  <p>L'icona della stampante (o <kbd>Ctrl</kbd>+<kbd>P</kbd>) apre l'anteprima. Qui scegli quali passi includere, il formato (A4 o Letter), l'orientamento, i margini, quanti passi per pagina e cosa mostrare: descrizioni, ora, screenshot, numero di pagina, sfondo bianco.</p>
-  <p><strong>Stampa / Salva PDF</strong> apre la stampa del browser: scegli «Salva come PDF» come stampante. Dallo stesso pannello puoi scaricare l'elenco dei passi in Markdown. Salvalo nella cartella del progetto per mantenere i link alle immagini.</p>
-</section>
-
-<section id="riprendere">
-  <h2>Riprendere un progetto</h2>
-  <p>In <strong>Apri un progetto</strong> scegli una registrazione già fatta.</p>
-  <ul>
-    <li><strong>Apri</strong> mostra la pagina HTML del progetto.</li>
-    <li><strong>Riprendi</strong> continua a registrare nello stesso progetto, anche un altro giorno. I nuovi passi vanno in fondo, dopo una riga con data e ora della ripresa.</li>
-  </ul>
-  <p>Se annulli subito la ripresa, il progetto resta com'era.</p>
-</section>
-
-<section id="backup">
-  <h2>Annullare e gestire i backup</h2>
-  <p>Se premi <strong>Annulla registrazione</strong> la cartella non sparisce: va in <code>backup cancellati</code>, dentro la cartella dei progetti, e puoi recuperarla. Se annulli una ripresa, ci vanno solo i passi di quella ripresa. Una copia di sicurezza finisce lì anche quando un salvataggio va storto.</p>
-  <p>Per vedere tutto apri <strong>Impostazioni → Backup cancellati → Gestisci</strong>. I più recenti sono in alto. Scegli una voce per vedere tipo, passi e peso, poi usa:</p>
-  <ul>
-    <li><strong>Ripristina:</strong> rimette il backup tra i progetti con lo stesso nome, o con <code>_2</code>, <code>_3</code>… se esiste già, e lo toglie dall'elenco. I passi di una ripresa annullata tornano come progetto a parte, con <code>_ripresa</code> nel nome.</li>
-    <li><strong>Apri:</strong> mostra la pagina del backup senza spostare niente (vale anche il doppio clic sulla voce).</li>
-    <li><strong>Elimina:</strong> cancella per sempre, senza passare dal Cestino. Il primo clic chiede conferma, il secondo elimina.</li>
-    <li><strong>Apri cartella:</strong> mostra <code>backup cancellati</code> in Esplora risorse.</li>
-  </ul>
-  <p>Si tengono al massimo 10 backup (5, 10, 20 o 50 da Impostazioni). Quando sono di più, vengono eliminati i più vecchi.</p>
-  <div class="nota"><p>L'elenco è salvato in <code>indice.json</code> e si aggiorna da solo anche se sposti o cancelli una cartella a mano. I backup fatti con le versioni precedenti entrano nell'elenco la prima volta che lo apri.</p></div>
-</section>
-
-<section id="impostazioni">
-  <h2>Impostazioni</h2>
-  <ul>
-    <li><strong>Cartella dei progetti:</strong> dove salvare le registrazioni. Il percorso lungo viene accorciato nella finestra.</li>
-    <li><strong>Tema:</strong> scuro o chiaro, vale anche per le pagine HTML.</li>
-    <li><strong>Nascondi barra:</strong> esclude la barretta dagli screenshot. Funziona su Windows 10 (versione 2004 o successiva) e su Windows 11.</li>
-    <li><strong>Compressione:</strong> Standard o MozJPEG, con qualità e dimensione.</li>
-    <li><strong>Backup da tenere:</strong> quanti conservarne (5, 10, 20 o 50).</li>
-    <li><strong>Backup cancellati:</strong> <strong>Gestisci</strong> apre l'elenco (vedi <a href="#backup">Annullare e backup</a>).</li>
-  </ul>
-  <p>Se lo schermo è basso, le Impostazioni scorrono con la rotellina o con la barra a destra.</p>
-  <p>I tasti rapidi (<code>tasto_pausa</code>, <code>tasto_fine</code>) e i profili avanzati si trovano in <code>%APPDATA%\RegistratoreAzioni\config.json</code>.</p>
-</section>
-
-<section id="file">
-  <h2>File creati e pulizia automatica</h2>
-  <p>Ogni progetto contiene <code>index.html</code>, <code>passi.json</code> e la cartella <code>immagini/</code>. Niente viene mai sovrascritto: se un nome esiste già, il programma aggiunge <code>_2</code>, <code>_3</code>…</p>
-  <p>Nella cartella <code>backup cancellati</code> c'è anche <code>indice.json</code>, l'elenco usato da Impostazioni.</p>
-  <p>Il programma toglie da solo i file <code>.tmp</code> lasciati da una chiusura anomala, le vecchie cartelle di estrazione in <code>Temp</code> e i report sul Desktop più vecchi di 14 giorni.</p>
-</section>
-
-<section id="da-sapere">
-  <h2>Da sapere</h2>
-  <ul>
-    <li><strong>Password:</strong> tutto ciò che scrivi viene salvato. Metti in pausa con <kbd>F10</kbd> quando le inserisci, oppure imposta <code>"registra_testo_digitato": false</code> in <code>config.json</code> per sostituire le lettere con dei pallini.</li>
-    <li><strong>Programmi come amministratore:</strong> per registrarli avvia anche <code>RegistratoreAzioni.exe</code> come amministratore.</li>
-    <li><strong>Più monitor:</strong> viene catturato solo lo schermo in cui si trova il cursore.</li>
-    <li><strong>OneDrive:</strong> se salvi in una cartella sincronizzata in tempo reale e vedi errori di scrittura su <code>passi.json</code>, usa una cartella locale come <code>C:\Progetti</code>.</li>
-    <li><strong>Privacy:</strong> tutti i dati restano sul tuo PC e non viene inviato nulla. Usa il programma solo sul tuo PC o con il consenso di chi lo usa.</li>
-  </ul>
-</section>
-
-<section id="segnalazioni">
-  <h2>Segnalazioni</h2>
-  <p>Registratore Azioni è open source (licenza MIT). Se trovi un errore o hai un'idea, premi <strong>Segnala</strong> nella schermata iniziale: crea sul Desktop un report tecnico, senza screenshot né testo digitato, che puoi leggere prima di inviarlo. Allegalo a una mail con due righe su cosa stavi facendo.</p>
-  <a class="mail" href="mailto:domenico.castaldod29@gmail.com?subject=Segnalazione%20Registratore%20Azioni%202.0">domenico.castaldod29@gmail.com</a>
-</section>
+</main>
 
 <div class="vuoto" id="vuoto">Nessun risultato. Prova con un'altra parola.</div>
 
 <footer>
-  Registratore Azioni 2.0 · Creato da Domenico Castaldo · <a href="https://dcastaldo.vercel.app" target="_blank" rel="noopener">dcastaldo.vercel.app</a>
+  Registratore Azioni 2.1 · Creato da Domenico Castaldo · <a href="https://dcastaldo.vercel.app" target="_blank" rel="noopener">dcastaldo.vercel.app</a>
 </footer>
 
-</main>
 </div>
 
 <script>
@@ -340,7 +355,7 @@ function aggiornaTema(){
 try{
   const t=localStorage.getItem('guida_tema');
   if(t==='scuro'||t==='chiaro')radice.dataset.tema=t;
-  else if(matchMedia('(prefers-color-scheme: dark)').matches)radice.dataset.tema='scuro';
+  else if(matchMedia('(prefers-color-scheme: light)').matches)radice.dataset.tema='chiaro';
 }catch(e){}
 $('#btema').onclick=()=>{
   const t=radice.dataset.tema==='scuro'?'chiaro':'scuro';
@@ -351,38 +366,38 @@ $('#btema').onclick=()=>{
 $('#bstampa').onclick=()=>window.print();
 aggiornaTema();
 
-const sezioni=[...document.querySelectorAll('main section')];
-const voci=[...document.querySelectorAll('#indice a')];
+const schede=[...document.querySelectorAll('article.passo')];
+const chip=[...document.querySelectorAll('#salti a')];
 const norm=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-const testi=sezioni.map(s=>norm(s.textContent));
-const voceDi=id=>voci.find(a=>a.getAttribute('href')==='#'+id);
+const testi=schede.map(s=>norm(s.textContent));
+const chipDi=id=>chip.find(a=>a.getAttribute('href')==='#'+id);
 
-// voce dell'indice evidenziata per la sezione che si sta leggendo
+// il salto rapido dell'argomento che stai leggendo si colora
 let corrente=null;
 function evidenzia(id){
   if(corrente===id)return;
   corrente=id;
-  voci.forEach(a=>a.classList.toggle('att',a.getAttribute('href')==='#'+id));
+  chip.forEach(a=>a.classList.toggle('att',a.getAttribute('href')==='#'+id));
 }
 function seguiScorrimento(){
-  const visibili=sezioni.filter(s=>s.style.display!=='none');
-  let id=visibili.length?visibili[0].id:null;
-  for(const s of visibili){if(s.getBoundingClientRect().top<=120)id=s.id;else break;}
-  if(id)evidenzia(id);
+  if(scrollY<150){evidenzia(null);return;}
+  const visibili=schede.filter(s=>s.style.display!=='none');
+  let id=null;
+  for(const s of visibili){if(s.getBoundingClientRect().top<=140)id=s.id;else break;}
+  evidenzia(id);
 }
 addEventListener('scroll',seguiScorrimento,{passive:true});
-seguiScorrimento();
 
-// ricerca: nasconde le sezioni senza il testo cercato e le relative voci dell'indice
+// ricerca: nasconde le schede senza il testo cercato e i loro salti rapidi
 const campo=$('#cerca');
 campo.addEventListener('input',()=>{
   const q=norm(campo.value.trim());
   let trovate=0;
-  sezioni.forEach((s,i)=>{
+  schede.forEach((s,i)=>{
     const ok=!q||testi[i].includes(q);
     s.style.display=ok?'':'none';
-    const v=voceDi(s.id);
-    if(v)v.style.display=ok?'':'none';
+    const c=chipDi(s.id);
+    if(c)c.style.display=ok?'':'none';
     if(ok)trovate++;
   });
   $('#vuoto').style.display=trovate?'none':'block';
@@ -392,11 +407,11 @@ campo.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&campo.value){campo.value='';campo.dispatchEvent(new Event('input'));}
 });
 
-// link con #ancora (il «?» del programma): porta alla sezione giusta
+// link con #ancora (il «?» del programma): porta alla scheda giusta
 function vaiAncora(){
   const id=decodeURIComponent(location.hash.slice(1));
   const s=id&&document.getElementById(id);
-  if(s&&s.matches('main section')){
+  if(s&&s.matches('article.passo')){
     if(campo.value){campo.value='';campo.dispatchEvent(new Event('input'));}
     s.scrollIntoView({block:'start'});
     evidenzia(s.id);
