@@ -6,6 +6,11 @@ e alla fine crea una pagina HTML con tutti i passi, le descrizioni modificabili 
 
 Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsiasi programma.
 
+## Demo interattiva
+`demo.html` mostra tutto quello che il programma sa fare con **finestre simulate**: si clicca sugli elementi evidenziati (o si preme Avanti) per vedere come si avvia una registrazione, si sceglie un programma, si usa la barretta, si modifica la pagina HTML, si esporta, si ripristinano i backup, si apre `config.json`… senza registrare niente.
+- Si apre da **Impostazioni → Demo interattiva → Apri**, dal pulsante ▶ in alto nella guida e dai pulsanti «Guarda la demo» di ogni sezione della guida.
+- Alla **prima volta** che si apre il programma (nessuna `config.json` e nessun progetto) compare una schermata «Sembra la tua prima volta qui» con **Guarda la demo** o **Salta**. Non torna più.
+
 ## Novità della versione 2.1
 - **Esporta file unico** ora si fa dal programma («Apri un progetto → Esporta file unico»): si sceglie dove salvarlo con «Salva con nome» e dentro c'è solo il progetto selezionato. Il pulsante nella pagina HTML, che chiedeva la cartella con tutti i progetti, è stato tolto.
 - Nuova guida, con lo stesso aspetto delle pagine di registrazione: schede, tema scuro/chiaro, ricerca e salti rapidi.
@@ -23,6 +28,7 @@ Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsia
 - Uno screenshot per ogni clic, trascinamento o azione da tastiera (la rotellina del mouse è ignorata).
 - Un colore per ogni tipo di azione: rosso clic sinistro, blu destro, verde centrale, viola doppio clic, arancione trascinamento, verde acqua tastiera.
 - Tutto in una sola finestra, senza popup. Durante la registrazione resta solo una barretta piccola e trascinabile (pallino rosso fisso, pulsanti rotondi per pausa e fine), nascosta dagli screenshot. Con **Fine** la registrazione si ferma ma non si salva: puoi scegliere il nome e salvare, oppure **Riprendere** da dove eri.
+- **Demo interattiva** con finestre simulate, collegata a guida e Impostazioni (vedi sopra).
 - **Solo un programma**: nella schermata iniziale, «Cosa registrare» permette di scegliere un programma aperto. Clic e tasti fatti altrove vengono ignorati (utile se trascini una finestra o ne apri un'altra senza accorgertene).
 - **Ultimi passi**: il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi registrati, aggiornato in tempo reale. Una **×** accanto a ogni passo della registrazione in corso lo elimina insieme al suo screenshot (utile per un clic sbagliato).
 - Il testo digitato viene raggruppato: una riga di comando = un passo, non uno per lettera.
@@ -54,7 +60,7 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
 Per usare un'icona personalizzata basta aggiungere un `icon.png` quadrato (512×512 va benissimo, anche più grande) nella radice del repository.
-Il file `guida.html` è la guida aperta dal pulsante Guida / F1: tienilo nel repository. Con ogni nuova versione ricordati di aggiornare il numero in `registratore.py` (`VERSION`) e in `guida.html` (titolo, intestazione, piè di pagina e oggetto della mail).
+Il file `guida.html` è la guida aperta dal pulsante Guida / F1 e `demo.html` la demo (si aprono entrambi dal programma): tienili nel repository e collegati tra loro. Con ogni nuova versione ricordati di aggiornare il numero in `registratore.py` (`VERSION`) e in `guida.html` (titolo, intestazione, piè di pagina e oggetto della mail).
 Ogni tag `v*` pubblica una release e ne tiene solo le ultime 3, così c'è sempre una versione precedente a cui tornare. La build si ferma se `tools/cjpeg.exe` non corrisponde all'impronta SHA256 attesa nel workflow.
 Il file `marchio_registratore.txt` serve alla pulizia automatica delle cartelle temporanee: tienilo nel repository.
 Gli angoli vengono arrotondati in automatico per l'exe, la finestra e la pagina HTML. I colori dell'interfaccia seguono l'icona (grigio-blu, blu→magenta, pallino rosso). Senza `icon.png` il programma usa un'icona di riserva.
@@ -63,7 +69,7 @@ In locale, con Python 3.12:
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." --add-data "guida.html;." --add-data "tools/cjpeg.exe;tools" registratore.py
+pyinstaller --onefile --windowed --name RegistratoreAzioni --collect-submodules pynput --add-data "marchio_registratore.txt;." --add-data "guida.html;." --add-data "demo.html;." --add-data "tools/cjpeg.exe;tools" registratore.py
 ```
 
 ## Impostazioni
