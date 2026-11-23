@@ -40,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "2.0"
+VERSION = "2.1"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -1365,6 +1365,7 @@ __FAVICON__
   --glow1:rgba(31,85,255,.16);--glow2:rgba(127,66,247,.22);--sh:0 10px 30px rgba(40,50,90,.12)}
 __COLORI_CSS__
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;min-height:100vh;color:var(--fg);font:15px/1.55 "Segoe UI",system-ui,sans-serif;
   background:radial-gradient(60% 50% at 0% 100%,var(--glow1),transparent 70%),
              radial-gradient(55% 45% at 100% 0%,var(--glow2),transparent 70%),var(--bg);
@@ -1398,13 +1399,13 @@ h1{margin:0;font-size:1.4rem;line-height:1.25;letter-spacing:-.01em;overflow-wra
 [data-ed].cambiato{background:var(--sel)}
 figure{margin:0;position:relative}
 img.s{width:100%;height:auto;display:block;border-radius:14px;border:1px solid var(--cb);cursor:zoom-in}
-.op{position:absolute;top:10px;right:10px;width:34px;height:34px;opacity:0;transition:opacity .12s;
+.op{position:absolute;top:10px;right:10px;width:34px;height:34px;opacity:0;visibility:hidden;transition:opacity .12s,visibility .12s;
   background:var(--campo);box-shadow:0 4px 14px rgba(0,0,0,.3)}
 .op svg{width:17px;height:17px}
 .op.dl{right:52px}
 .op.dl:hover{color:#e11d3f}
-figure:hover .op{opacity:1}
-@media (hover:none){.op{opacity:1}}
+figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
+@media (hover:none){.op{opacity:1;visibility:visible}}
 #sb{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;
   padding:10px 12px 10px 20px;border-radius:999px;background:var(--campo);border:1px solid var(--cb);
   box-shadow:0 12px 36px rgba(0,0,0,.35);z-index:5;max-width:calc(100vw - 24px)}
