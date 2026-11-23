@@ -31,7 +31,11 @@ jobs:
           if (Test-Path tools/cjpeg.exe) {
             $opts += @("--add-data", "tools/cjpeg.exe;tools")
             & tools/cjpeg.exe -version 2>&1 | Write-Host
-            (Get-FileHash tools/cjpeg.exe -Algorithm SHA256).Hash | ForEach-Object { Write-Host "cjpeg.exe SHA256: $_" }
+            $hashCjpeg = (Get-FileHash tools/cjpeg.exe -Algorithm SHA256).Hash
+            Write-Host "cjpeg.exe SHA256: $hashCjpeg"
+            # Il binario e' nel repository: se cambia senza che qui si aggiorni l'impronta, la build si ferma.
+            $atteso = "0D93600E47213E955AF80D5F91374B2E2954D3A14D06DCBE2092E79C80ECA739"
+            if ($hashCjpeg -ne $atteso) { Write-Error "tools/cjpeg.exe non corrisponde all'impronta attesa"; exit 1 }
           } else {
             Write-Host "tools/cjpeg.exe non trovato: l'exe usera' solo la compressione standard"
           }
@@ -78,7 +82,7 @@ jobs:
 
             SHA256: `${{ steps.hash.outputs.sha }}`
 
-      # Tiene in Releases solo l'ultima versione: cancella le release (e i tag) piu' vecchie.
+      # Tiene in Releases le ultime 3 versioni (quella nuova piu' le 2 precedenti): cancella le piu' vecchie e i loro tag.
       - name: Rimuovi le release vecchie (solo con un tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -86,5 +90,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ultimo = "${{ github.ref_name }}"
-          $vecchie = gh release list --repo "${{ github.repository }}" --limit 100 --json tagName --jq ".[].tagName" | Where-Object { $_ -and $_ -ne $ultimo }
+          $tutte = @(gh release list --repo "${{ github.repository }}" --limit 100 --json tagName --jq ".[].tagName" | Where-Object { $_ })
+          $vecchie = $tutte | Select-Object -Skip 3 | Where-Object { $_ -ne $ultimo }
           foreach ($t in $vecchie) { gh release delete $t --repo "${{ github.repository }}" --cleanup-tag --yes }
