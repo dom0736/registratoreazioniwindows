@@ -49,7 +49,7 @@ body{margin:0;font:15px/1.55 "Segoe UI",system-ui,sans-serif;color:#fff;backgrou
 .gd .row{margin-top:8px}.gd .b{cursor:pointer;background:#eef1f8;text-align:center}.gd .b.p{background:linear-gradient(90deg,#3d6fff,#c13af2);color:#fff}.gd a{color:#3d6fff;font-size:12px;display:block;margin-top:10px}
 .win.gd .row .b{display:block;padding:9px 0;margin:0}
 @media (max-width:700px){.ta span{display:none}.ta{flex:0 0 42px;justify-content:center;padding:0}}
-@media (max-width:860px){#pc{height:auto;min-height:100vh}#dk{grid-template-columns:1fr;overflow:visible}#ic{grid-template-columns:repeat(4,1fr)}#st{min-height:430px}}
+@media (max-width:860px){#pc{height:auto;min-height:100vh}#dk{grid-template-columns:1fr;overflow:visible}#ic{grid-template-columns:repeat(4,1fr)}#st{order:2;min-height:0}#gd{order:3}}
 .win{width:460px;max-width:100%;border-radius:12px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);font-size:14px;animation:in .25s;position:relative}
 .win.ext{width:640px;max-width:100%;background:#fff;color:#1b2740}
 @keyframes in{from{opacity:0}}
@@ -104,6 +104,8 @@ pre{margin:0;font:13px/1.7 Consolas,monospace}mark{background:none;color:inherit
 .sbar{display:flex;align-items:center;gap:10px;margin:16px auto 0;width:max-content;max-width:100%;padding:8px 8px 8px 20px;border-radius:99px;background:#161f2d;color:#fff;box-shadow:0 12px 30px rgba(0,0,0,.35)}.sbar .b{display:inline-block;margin:0;padding:9px 18px;background:rgba(255,255,255,.14);color:#fff}.sbar .b.p{background:linear-gradient(90deg,#3d6fff,#c13af2)}
 .ov{position:absolute;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;padding:20px}.dlg{width:100%;max-width:430px;border-radius:20px;background:var(--campo);border:1px solid var(--cb);padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.4)}
 .dh{margin-bottom:12px}.dh b{font-size:1.05rem}.fi{display:flex;gap:8px;align-items:center;padding:9px 14px;border-radius:99px;background:var(--v);margin-bottom:8px}
+.dlg.gr{max-width:none}.cm{margin:0 0 8px}.ch2{display:inline-block;padding:3px 10px;border-radius:99px;border:1px solid var(--cb);font-size:11px;font-weight:600;margin:0 4px 4px 0}.ch2.on{background:linear-gradient(90deg,#3d6fff,#c13af2);color:#fff;border-color:transparent}
+.gg{display:grid;grid-template-columns:150px 1fr;gap:14px}.fl2{display:grid;gap:10px;align-content:start;padding:10px 12px;border-radius:14px;background:var(--v);border:1px solid var(--cb);font-size:11px}.fl2>div>span{display:block;color:var(--mut);font-weight:600;font-size:10px;text-transform:uppercase;margin-bottom:4px}
 .rw{display:flex;gap:12px;align-items:center;padding:10px 8px;border-radius:12px}.rw>span:nth-child(2){flex:1}.rw small{display:block;color:var(--mut);font-size:11px}
 .hot{outline:2px solid #ffd54a;outline-offset:2px;animation:p 1.1s infinite;cursor:pointer}
 @keyframes p{50%{outline-offset:6px;outline-color:transparent}}
@@ -131,8 +133,8 @@ const bar=(n,p,o)=>`<div class="bar"><div><i class="dot${o?' o':''}"></i><b>${o?
 const pn=(n)=>`<div class="pn">${n.map((x,i)=>`<p><span>${x}</span><span class="x"${i==1?' data-h="x"':''}>×</span></p>`).join('')}</div>`;
 const br=b=>`<div class="win ext br"><div class="tb tbs"><span class="tab">${IM}Lezione Packet Tracer<i>×</i></span><span style="flex:1"></span>${WC()}</div><div class="ad"><span>${sv('back',16)}${sv('fwd',16)}${sv('reload',16)}</span><span class="url">${sv('file',14)}file:///C:/Progetti/Lezione Packet Tracer/index.html</span></div><div class="pg">${b}</div></div>`;
 const stp=(n,d,img,del)=>`<div class="sc"><div class="nn">${n}</div><div class="sb2"><p>${d}</p>${img?`<div class="im2"><u></u><span class="ob"><i>${sv('expand',15)}</i><i${del?' data-h="cest"':''}>${sv('trash',15)}</i></span></div>`:''}</div></div>`;
-const dlg=(t,b)=>`<div class="ov"><div class="dlg"><div class="dh"><b>${t}</b></div>${b}</div></div>`;
-const web=m=>br(`<div class="hd">${IM}<div class="tt"><h1 data-h="tit">Lezione Packet Tracer</h1><div class="l2">Registratore Azioni 2.2 · ${m==1?2:3} passi</div></div><span class="tl lbl" data-h="trova">${sv('search',16)}Cerca</span><span class="tl">${sv('theme',18)}</span><span class="tl" data-h="stampa">${sv('printer',18)}</span></div><p class="hn">Clicca sul titolo o su una descrizione per modificarla, o sul cestino di un’immagine per togliere il passo.</p>${stp(1,'Clic su Router0',1)}${m==1?'':stp(2,'Doppio clic su Switch1',1,1)}${stp(m==1?2:3,'Scrivo <code>show ip route</code> e premo Invio',0)}${m==1?`<div class="sbar"><span>1 passo eliminato</span><span class="b">Annulla</span><span class="b p" data-h="copia">Salva copia</span></div>`:''}${m==2?dlg('Cerca',`<div class="fi">${sv('search',14)}show</div><div class="rw" data-h="riga"><span class="nn">3</span><span><b>show ip route</b><small>10:42 · Packet Tracer</small></span>${sv('copy',16)}</div><div class="rw"><span class="nn">7</span><span><b>show running-config</b><small>10:44 · Packet Tracer</small></span>${sv('copy',16)}</div>`):''}${m==3?dlg('Prima di salvare',`<p style="margin:0 0 14px;color:var(--mut)">Nel passaggio successivo scegli la cartella che <b style="color:var(--fg)">contiene</b> i progetti, non quella del progetto. Il browser se la ricorda.</p><div style="text-align:right"><span class="b p" data-h="ok">Ho capito</span></div>`):''}`);
+const dlg=(t,b,c)=>`<div class="ov"><div class="dlg${c?' '+c:''}"><div class="dh"><b>${t}</b></div>${b}</div></div>`;
+const web=m=>br(`<div class="hd">${IM}<div class="tt"><h1 data-h="tit">Lezione Packet Tracer</h1><div class="l2">Registratore Azioni 2.2 · ${m==1?2:3} passi</div></div><span class="tl lbl" data-h="trova">${sv('search',16)}Cerca</span><span class="tl">${sv('theme',18)}</span><span class="tl" data-h="stampa">${sv('printer',18)}</span></div><p class="hn">Clicca sul titolo o su una descrizione per modificarla, o sul cestino di un’immagine per togliere il passo.</p>${stp(1,'Clic su Router0',1)}${m==1?'':stp(2,'Doppio clic su Switch1',1,1)}${stp(m==1?2:3,'Scrivo <code>show ip route</code> e premo Invio',0)}${m==1?`<div class="sbar"><span>1 passo eliminato</span><span class="b">Annulla</span><span class="b p" data-h="copia">Salva copia</span></div>`:''}${m==2?dlg('Cerca',`<div class="fi">${sv('search',14)}show</div><div class="cm"><span class="ch2 on">Tutte le parole</span><span class="ch2">Una qualsiasi</span><span class="ch2">Frase esatta</span></div><div class="gg"><div class="fl2"><div><span>Cerca in</span><i class="ch2 on">Descrizioni</i><i class="ch2 on">Testi digitati</i><i class="ch2 on">Finestre</i></div><div><span>Azione</span><i class="ch2">Testo</i><i class="ch2">Clic</i></div><div><span>Finestra</span><i class="ch2">Tutte</i></div></div><div><div class="rw" data-h="riga"><span class="nn">3</span><span><b>show ip route</b><small>10:42 · Packet Tracer</small></span>${sv('copy',16)}</div><div class="rw"><span class="nn">7</span><span><b>show running-config</b><small>10:44 · Packet Tracer</small></span>${sv('copy',16)}</div></div></div>`,'gr'):''}${m==3?dlg('Prima di salvare',`<p style="margin:0 0 14px;color:var(--mut)">Nel passaggio successivo scegli la cartella che <b style="color:var(--fg)">contiene</b> i progetti, non quella del progetto. Il browser se la ricorda.</p><div style="text-align:right"><span class="b p" data-h="ok">Ho capito</span></div>`):''}`);
 const li=(a,s)=>a.map((x,i)=>`<div class="li${i==s?' s':''}"${i==s?' data-h="sel"':''}>${x[0]}<small>${x[1]}</small></div>`).join('');
 const P=[['Lezione Packet Tracer','24 passi · 3,1 MB'],['Backup router','12 passi · 1,4 MB']];
 const S={
@@ -178,8 +180,8 @@ const T=[
 ['web','cest','Elimina un passo','Il cestino sull’immagine toglie il passo e i numeri si ricalcolano. Il pulsante accanto apre l’immagine ingrandita.'],
 ['web2','copia','Salva copia','Compare la barra in basso: Annulla rimette a posto i passi, Salva copia crea nome_modificato accanto all’originale, che non cambia.'],
 ['pop','ok','Prima volta','Un popup spiega quale cartella scegliere. Il browser se la ricorda (serve Edge o Chrome).'],
-['web','trova','Cerca','Il pulsante accanto a tema e stampa apre l’elenco di tutto ciò che hai digitato.'],
-['trova','riga','Cerca e salta','Scrivi per cercare, clicca una riga per andare a quel passo. L’icona a destra copia il testo.'],
+['web','trova','Cerca','Il pulsante accanto a tema e stampa apre la ricerca su tutti i passi: descrizioni, testi digitati e finestre.'],
+['trova','riga','Cerca e salta','Scrivi per cercare e restringi con i filtri a sinistra. Clicca una riga per andare a quel passo; l’icona a destra copia il testo.'],
 ['web','stampa','Stampa e PDF','Anteprima con passi, formato, margini e contenuti a scelta. Poi Salva come PDF dal browser.']]],
 ['riprendere','Riprendere ed esportare',[
 ['prog','apri','Apri','Mostra la pagina HTML del progetto scelto.'],
@@ -228,8 +230,16 @@ function fit(w){if(w.min||w.mx||w.id=='gd'||!w.el.isConnected)return;const K=$('
 let dx=0,dy=0;const t=r.top-D.top+K.scrollTop;if(t<0)dy=-t;else if(r.top>D.bottom-40)dy=D.bottom-40-r.top;
 if(r.right<D.left+80)dx=D.left+80-r.right;else if(r.left>D.right-80)dx=D.right-80-r.left;
 if(dx||dy){w.x+=dx;w.y+=dy;pos(w)}}
-function sync(){WM.l.forEach(w=>{w.el.classList.toggle('min',!!w.min);w.el.classList.toggle('inact',w.id!=WM.act);w.el.classList.toggle('mx',!!w.mx);pos(w)});WM.l.forEach(fit);tk()}
-addEventListener('resize',()=>WM.l.forEach(fit));
+/* una finestra appena aperta resta dentro l'area delle finestre: non finisce sotto la guida né sopra le icone */
+function tidy(w){const S=$('#st').getBoundingClientRect(),r=w.el.getBoundingClientRect();let dx=0,dy=0;
+if(r.left<S.left)dx=S.left-r.left;else if(r.right>S.right)dx=Math.max(S.right-r.right,S.left-r.left);
+if(r.top<S.top)dy=S.top-r.top;
+if(dx||dy){w.x+=dx;w.y+=dy;pos(w)}}
+/* schermo stretto: l'area delle finestre cresce solo se serve (mai più bassa di prima), così la guida non salta a ogni passo */
+function tieni(){const s=$('#st');if(innerWidth>=860){s.style.minHeight='';delete s.dataset.h;return}
+const h=$('#scena').offsetHeight;if(h>(+s.dataset.h||0)){s.dataset.h=h;s.style.minHeight=h+'px'}}
+function sync(){WM.l.forEach(w=>{w.el.classList.toggle('min',!!w.min);w.el.classList.toggle('inact',w.id!=WM.act);w.el.classList.toggle('mx',!!w.mx);pos(w)});WM.l.forEach(w=>{if(!w.placed&&w.id!='gd'&&!w.min&&!w.mx&&w.el.isConnected&&w.el.offsetWidth){w.placed=1;tidy(w)}});WM.l.forEach(fit);tieni();tk()}
+addEventListener('resize',()=>{WM.l.forEach(fit);tieni()});
 const tp=()=>{const v=WM.l.filter(w=>!w.min).sort((a,b)=>b.z-a.z)[0];return v?v.id:null};
 function fc(id){const w=gw(id);if(!w)return;w.min=0;w.z=++WM.z;WM.act=id;sync()}
 function mn(id){const w=gw(id);if(!w)return;w.min=1;if(WM.act==id)WM.act=tp();sync()}
@@ -237,7 +247,7 @@ function tg(id){const w=gw(id);if(!w||id=='gd'||w.bar)return;w.mx=!w.mx;fc(id)}
 function cl(id){const w=gw(id);if(!w)return;WM.l=WM.l.filter(x=>x!==w);if(id=='gd')w.el.hidden=true;else w.el.remove();if(WM.act==id)WM.act=tp();sync()}
 function mk(id,title,tr,bar){let w=gw(id);
 if(!w){const el=document.createElement('div');el.className='aw';el.dataset.w=id;const n=WM.l.length-1;
-const nr=innerWidth<860;w=gw0(id,title,el,nr?0:(n%4)*30-45,nr?(n%4)*14:(n%4)*26-39);$('#scena').append(el)}
+const nr=innerWidth<860;w=gw0(id,title,el,nr||!n?0:(n%4)*30-45,nr?(n%4)*14:(n?(n%4)*26-39:0));$('#scena').append(el)}
 w.title=title;w.tr=!!tr;if(!!bar!=!!w.bar){w.x=w.y=0;w.mx=0}w.bar=!!bar;w.el.classList.toggle('bar',!!bar);return w}
 function gw0(id,title,el,x,y){const w={id,title,el,min:0,mx:0,x,y,z:0};WM.l.push(w);return w}
 function render(sc,h){const[id,title,tr,bar]=SA[sc];
@@ -245,7 +255,7 @@ function render(sc,h){const[id,title,tr,bar]=SA[sc];
 const w=mk(id,title,tr,bar);w.el.innerHTML=S[sc];fc(id);
 WM.l.filter(x=>x.tr&&x.id!=id).forEach(x=>cl(x.id));
 const e=w.el.querySelector('[data-h="'+h+'"]');if(e)e.classList.add('hot')}
-function reset(){WM.l.filter(w=>w.id!='gd').forEach(w=>w.el.remove());WM.l=WM.l.filter(w=>w.id=='gd');WM.act=WM.l.length?'gd':null;sync()}
+function reset(){WM.l.filter(w=>w.id!='gd').forEach(w=>w.el.remove());WM.l=WM.l.filter(w=>w.id=='gd');WM.act=WM.l.length?'gd':null;const st=$('#st');st.style.minHeight='';delete st.dataset.h;sync()}
 /* clic sulla barra: porta in primo piano; se è già in primo piano la riduce a icona (come Windows) */
 $('#apps').onclick=e=>{const b=e.target.closest('.ta');if(!b)return;cm();const w=gw(b.dataset.t);if(w.min||WM.act!=w.id)fc(w.id);else mn(w.id)};
 $('#apps').oncontextmenu=e=>{const b=e.target.closest('.ta');if(!b)return;e.preventDefault();const w=gw(b.dataset.t);
