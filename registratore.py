@@ -1403,6 +1403,7 @@ img.s{width:100%;height:auto;display:block;border-radius:14px;border:1px solid v
   background:var(--campo);box-shadow:0 4px 14px rgba(0,0,0,.3)}
 .op svg{width:17px;height:17px}
 .op.dl{right:52px}
+.op:hover{background:var(--campo);box-shadow:0 4px 14px rgba(0,0,0,.3),0 0 0 2px var(--a1)}   /* resta pieno anche al passaggio del mouse */
 .op.dl:hover{color:#e11d3f}
 figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 @media (hover:none){.op{opacity:1;visibility:visible}}
