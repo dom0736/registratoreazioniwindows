@@ -2980,6 +2980,11 @@ class App:
         pausa = str(self.cfg.get("tasto_pausa", "f10")).upper()
         fine = str(self.cfg.get("tasto_fine", "f9")).upper()
         self._testo(190, 424, f"{pausa} pausa   ·   {fine} fine", FONT_S, c["mut"], anchor="n")
+        if not self.cfg.get("registra_testo_digitato", True):
+            # promemoria: finche' e' spento, nei passi ci sono solo pallini. Un clic porta alle Impostazioni.
+            avv = self._testo(190, 442, "Testo digitato spento: nei passi solo pallini", FONT_S, c["err"], anchor="n")
+            self._mani((avv,), click=lambda _e: self._scena_impostazioni(),
+                       entra=lambda _e: self.cv.config(cursor="hand2"), esce=lambda _e: self.cv.config(cursor=""))
 
         self.t_msg = self._testo(34, y_msg, "", FONT_S, c["ok"], width=312)
         y_linea = y_msg + 14 * righe + 20
@@ -3084,7 +3089,14 @@ class App:
         c = self.c
         era_qui = self.scena == "impostazioni"
         W_, X0, X1 = 440, 54, 386          # larghezza finestra, margini interni del riquadro
-        altezze = (80, 62, 62, 62, 62, 62, 62)
+        dig_on = bool(self.cfg.get("registra_testo_digitato", True))
+        if not era_qui:
+            self._dig_conf = False
+        conf = bool(getattr(self, "_dig_conf", False)) and dig_on  # sto chiedendo conferma per spegnere il testo digitato
+        avviso = ("Se lo spegni, le lettere che digiti non vengono salvate: nei passi e in «Trova testi» "
+                  "ci saranno solo pallini (•••) e dopo non si potranno più recuperare.")
+        righe_av = self._righe_testo(avviso, X1 - X0) if conf else 0
+        altezze = (80, 62, 62, 42 + 15 * righe_av + 58 if conf else 62, 62, 62, 62, 62)
         tot = 96 + sum(altezze) + 36
         vis = min(tot, max(400, int(self.root.winfo_screenheight() / self.k) - 130))  # lascia posto a barra del titolo e Start
         self._scena("impostazioni", W_, vis)
@@ -3120,24 +3132,40 @@ class App:
         self._pillole(X1 - 136, riga_y(2) - 16, ["Sì", "No"], "Sì" if self.cfg.get("nascondi_barra", True) else "No",
                       self._imposta_barra, w=64, h=32, gap=8)
 
-        self._testo(X0, riga_y(3), "Compressione", FONT, anchor="w")
+        # testo digitato: acceso = le lettere finiscono nei passi; spento = solo pallini (con avviso prima di spegnere)
+        if conf:
+            self._testo(X0, ys[3] + 16, "Testo digitato", FONT)
+            self._testo(X0, ys[3] + 42, avviso, FONT_S, c["err"], width=X1 - X0)
+            yb = ys[3] + 42 + 15 * righe_av + 10
+            self._bottone(X0, yb, 100, 32, "Annulla", self._dig_annulla, primario=True, font=FONT)
+            self._bottone(X0 + 108, yb, 170, 32, "Sì, non registrare", self._dig_spegni, font=FONT)
+        else:
+            if dig_on:
+                self._testo(X0, riga_y(3), "Testo digitato", FONT, anchor="w")
+            else:
+                self._testo(X0, ys[3] + 16, "Testo digitato", FONT)
+                self._testo(X0, ys[3] + 40, "Al posto delle lettere: •••", FONT_S, c["err"])
+            self._pillole(X1 - 136, riga_y(3) - 16, ["Sì", "No"], "Sì" if dig_on else "No",
+                          self._imposta_dig, w=64, h=32, gap=8)
+
+        self._testo(X0, riga_y(4), "Compressione", FONT, anchor="w")
         if self.cfg.get("jpeg_motore") == "mozjpeg":
             riassunto = f"MozJPEG · {modalita_attive(self.cfg)['MozJPEG']['qualita']}   ›"
         else:
             riassunto = "Standard   ›"
-        self._bottone(X1 - 170, riga_y(3) - 17, 170, 34, riassunto, self._scena_compressione, font=FONT)
+        self._bottone(X1 - 170, riga_y(4) - 17, 170, 34, riassunto, self._scena_compressione, font=FONT)
 
         massimo = str(int(self.cfg.get("backup_massimo", BACKUP_MASSIMO)))
         opzioni = ["5", "10", "20", "50"]
-        self._testo(X0, riga_y(4), "Backup da tenere", FONT, anchor="w")
-        self._pillole(X1 - 194, riga_y(4) - 16, opzioni, massimo if massimo in opzioni else "10",
+        self._testo(X0, riga_y(5), "Backup da tenere", FONT, anchor="w")
+        self._pillole(X1 - 194, riga_y(5) - 16, opzioni, massimo if massimo in opzioni else "10",
                       self._imposta_backup, w=44, h=32, gap=6)
 
-        self._testo(X0, riga_y(5), "Backup cancellati", FONT, anchor="w")
-        self._bottone(X1 - 130, riga_y(5) - 17, 130, 34, "Gestisci   ›", self._scena_backup, font=FONT)
+        self._testo(X0, riga_y(6), "Backup cancellati", FONT, anchor="w")
+        self._bottone(X1 - 130, riga_y(6) - 17, 130, 34, "Gestisci   ›", self._scena_backup, font=FONT)
 
-        self._testo(X0, riga_y(6), "Demo interattiva", FONT, anchor="w")
-        self._bottone(X1 - 130, riga_y(6) - 17, 130, 34, "Apri   ›", self._demo, font=FONT)
+        self._testo(X0, riga_y(7), "Demo interattiva", FONT, anchor="w")
+        self._bottone(X1 - 130, riga_y(7) - 17, 130, 34, "Apri   ›", self._demo, font=FONT)
         self.root.bind("<Escape>", lambda _e: self._scena_avvio())
         self._scorri_scena(tot, vis, self._imp_y if era_qui else 0)
 
@@ -3410,6 +3438,28 @@ class App:
     def _imposta_barra(self, nome):
         self.cfg["nascondi_barra"] = nome == "Sì"
         salva_config(self.cfg)
+        self._scena_impostazioni()
+
+    def _imposta_dig(self, nome):
+        """Sì: riaccende subito. No: prima compare l'avviso (la riga si allarga) e si spegne solo se confermi."""
+        if nome == "Sì":
+            self._dig_conf = False
+            self.cfg["registra_testo_digitato"] = True
+            salva_config(self.cfg)
+        elif self.cfg.get("registra_testo_digitato", True):
+            self._dig_conf = True
+        else:
+            return
+        self._scena_impostazioni()
+
+    def _dig_spegni(self):
+        self._dig_conf = False
+        self.cfg["registra_testo_digitato"] = False
+        salva_config(self.cfg)
+        self._scena_impostazioni()
+
+    def _dig_annulla(self):
+        self._dig_conf = False
         self._scena_impostazioni()
 
     def _scegli_root(self):
