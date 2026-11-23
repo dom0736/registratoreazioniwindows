@@ -16,8 +16,8 @@ body{margin:0;font:15px/1.55 "Segoe UI",system-ui,sans-serif;color:#fff;backgrou
 .ic{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:8px;font-size:12px;line-height:1.25;text-align:center;cursor:pointer;text-shadow:0 1px 3px #000;border:1px solid transparent}
 .ic:hover{background:rgba(255,255,255,.15)}.ic.att{background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.4)}
 .ic b{width:40px;height:40px;border-radius:10px;background:#fff;display:grid;place-items:center;font-size:21px;font-weight:400;text-shadow:none}
-#st{position:relative;display:grid;place-items:center;min-height:100%;align-self:stretch}
-#scena{display:grid;width:100%;min-height:100%;place-items:center}
+#st{position:relative;display:grid;place-items:center;place-items:safe center;min-height:100%;align-self:stretch}
+#scena{display:grid;width:100%;min-height:100%;place-items:center;place-items:safe center}
 .aw{grid-area:1/1;max-width:100%;min-width:0}.aw.bar{place-self:start end;margin:2px}
 .aw.min,#gd.min{display:none}[hidden]{display:none!important}
 .aw.mx{place-self:stretch;transform:none!important;width:100%}.aw.mx>.win{width:100%;max-width:none;height:100%;border-radius:0}
@@ -223,7 +223,13 @@ const gdw={id:'gd',title:'Guida demo',ico:'gd',el:$('#gd'),min:0,mx:0,x:0,y:0,z:
 const gw=id=>WM.l.find(w=>w.id==id);
 const pos=w=>{w.el.style.transform=w.mx?'':`translate(${w.x}px,${w.y}px)`;w.el.style.zIndex=w.z};
 function tk(){$('#apps').innerHTML=WM.l.map(w=>`<button type="button" class="ta${w.id==WM.act?' on':''}${w.min?' mn':''}" data-t="${w.id}" title="${w.title}" aria-pressed="${w.id==WM.act}">${ic(AP[w.id])}<span>${w.title}</span></button>`).join('')}
-function sync(){WM.l.forEach(w=>{w.el.classList.toggle('min',!!w.min);w.el.classList.toggle('inact',w.id!=WM.act);w.el.classList.toggle('mx',!!w.mx);pos(w)});tk()}
+/* tiene la barra del titolo sempre dentro l'area visibile e raggiungibile (anche dopo un resize) */
+function fit(w){if(w.min||w.mx||w.id=='gd'||!w.el.isConnected)return;const K=$('#dk'),D=K.getBoundingClientRect(),r=w.el.getBoundingClientRect();if(!r.width)return;
+let dx=0,dy=0;const t=r.top-D.top+K.scrollTop;if(t<0)dy=-t;else if(r.top>D.bottom-40)dy=D.bottom-40-r.top;
+if(r.right<D.left+80)dx=D.left+80-r.right;else if(r.left>D.right-80)dx=D.right-80-r.left;
+if(dx||dy){w.x+=dx;w.y+=dy;pos(w)}}
+function sync(){WM.l.forEach(w=>{w.el.classList.toggle('min',!!w.min);w.el.classList.toggle('inact',w.id!=WM.act);w.el.classList.toggle('mx',!!w.mx);pos(w)});WM.l.forEach(fit);tk()}
+addEventListener('resize',()=>WM.l.forEach(fit));
 const tp=()=>{const v=WM.l.filter(w=>!w.min).sort((a,b)=>b.z-a.z)[0];return v?v.id:null};
 function fc(id){const w=gw(id);if(!w)return;w.min=0;w.z=++WM.z;WM.act=id;sync()}
 function mn(id){const w=gw(id);if(!w)return;w.min=1;if(WM.act==id)WM.act=tp();sync()}
