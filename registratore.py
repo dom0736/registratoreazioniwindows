@@ -430,7 +430,8 @@ def _crea_pagina(d: Path) -> None:
     """Scrive l'index.html in una cartella che ha un passi.json ma non la pagina (succede con le riprese annullate)."""
     try:
         dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
-        genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []), dati.get("modalita", ""), dati.get("creato", ""))
+        genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []), dati.get("modalita", ""), dati.get("creato", ""),
+                    versione=dati.get("versione"))
     except Exception:
         _log.exception("Impossibile creare la pagina del backup")
 
@@ -513,7 +514,7 @@ def ripristina_backup(bk: Path, nome: str, radice: Path) -> Path:
             dati["titolo"] = f"{dati.get('titolo') or dest.name} (passi di una ripresa annullata)"
         scrivi_json_atomico(dest / "passi.json", dati)
         genera_html(dest, dati.get("titolo") or dest.name, dati.get("passi", []),
-                    dati.get("modalita", ""), dati.get("creato", ""))
+                    dati.get("modalita", ""), dati.get("creato", ""), versione=dati.get("versione"))
     except Exception:
         _log.exception("Backup ripristinato ma non sono riuscito ad aggiornare la pagina")
     try:
@@ -890,6 +891,7 @@ class Registratore:
         self.mouse_ctl = mouse.Controller()
         self.contatore = 0
         self.creato = datetime.datetime.now().isoformat(timespec="seconds")
+        self.versione = VERSION     # versione del programma che ha registrato (in una ripresa: anche quelle precedenti)
         self.k_pausa = getattr(Key, str(cfg.get("tasto_pausa", "f10")).lower(), Key.f10)
         self.k_fine = getattr(Key, str(cfg.get("tasto_fine", "f9")).lower(), Key.f9)
         self.pausa_dig = float(cfg.get("pausa_digitazione_sec", 1.2))
@@ -901,6 +903,13 @@ class Registratore:
         if esistente:  # si riprende un progetto già registrato: si continua a numerare da dove era
             self.steps = list(esistente.get("passi", []))
             self.creato = esistente.get("creato") or self.creato
+            vecchia = esistente.get("versione")
+            if not vecchia:
+                self.versione = f"{VERSION} (ripresa)"
+            elif vecchia != VERSION and VERSION not in str(vecchia).split(", "):
+                self.versione = f"{vecchia}, {VERSION}"
+            else:
+                self.versione = vecchia
             tit = esistente.get("titolo")
             self.titolo = tit if tit and tit != self.dir.name else None
             self.steps_prima = json.loads(json.dumps(self.steps))
@@ -952,7 +961,7 @@ class Registratore:
                 shutil.move(str(self.dir / "immagini" / nome), str(dest / "immagini" / nome))
             scrivi_json_atomico(dest / "passi.json", {
                 "progetto": self.dir.name, "titolo": self.titolo or self.dir.name, "creato": self.creato,
-                "modalita": self.nome_modo, "passi": nuovi})
+                "modalita": self.nome_modo, "versione": self.versione, "passi": nuovi})
             pota_backup(bk, massimo, tieni=dest)
         self.steps = json.loads(json.dumps(self.steps_prima))
         self._salva_json()
@@ -1326,6 +1335,7 @@ class Registratore:
                 "titolo": self.titolo or self.dir.name,
                 "creato": self.creato,
                 "modalita": self.nome_modo,
+                "versione": self.versione,
                 "passi": self.steps,
             })
         except OSError as e:
@@ -1334,7 +1344,8 @@ class Registratore:
 
     def scrivi_html(self):
         try:
-            genera_html(self.dir, self.titolo or self.dir.name, self.steps, self.nome_modo, self.creato)
+            genera_html(self.dir, self.titolo or self.dir.name, self.steps, self.nome_modo, self.creato,
+                        versione=self.versione)
         except OSError as e:
             self.errori.append(repr(e))
             _log.exception("Errore nella creazione di index.html")
@@ -1433,9 +1444,9 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 @media (max-width:560px){.top{flex-wrap:wrap}.tools{margin-left:auto}.passo{grid-template-columns:1fr}}
 
 /* ---- popup «Trova testi» ---- */
-#tv{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding:18px;
+#tv,#gu{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding:18px;
   background:rgba(8,12,20,.6);backdrop-filter:blur(4px)}
-#tv[hidden]{display:none}
+#tv[hidden],#gu[hidden]{display:none}
 .tv-box{width:min(620px,100%);max-height:min(720px,100%);display:flex;flex-direction:column;border-radius:24px;overflow:hidden;
   background:var(--campo);color:var(--fg);border:1px solid var(--cb);box-shadow:0 24px 60px rgba(0,0,0,.45)}
 .tv-testa{display:flex;align-items:center;gap:12px;padding:16px 18px 10px}
@@ -1463,13 +1474,30 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 .tv-c svg{width:16px;height:16px}
 .tv-sep{margin:12px 4px 8px;color:var(--mut);font-size:.72rem;font-weight:600;text-align:center}
 .tv-vuoto{margin:26px 10px;color:var(--mut);text-align:center;font-size:.9rem}
+.gu-box{width:min(760px,100%)}
+.gu-testo{margin:0;padding:0 22px 6px;color:var(--mut);font-size:.9rem}
+.gu-fig{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:12px 22px 4px;overflow:auto;min-height:0}
+.gu-fig figure{margin:0;display:flex;flex-direction:column;gap:8px}
+.gu-fig svg{width:100%;height:auto;display:block}
+.gu-fig figcaption{font-size:.82rem;line-height:1.4}
+.gu-fig figcaption b{color:var(--fg)}
+.gu-piede{display:flex;justify-content:flex-end;padding:14px 22px 18px}
+@media (max-width:620px){.gu-fig{grid-template-columns:1fr}}
+.gu-fig figure{background:var(--vetro);border-radius:18px;padding:6px 6px 12px;color:var(--fg)}
+.gu-fig figcaption{padding:0 10px}
+.gu-n{color:var(--a2)!important;overflow-wrap:anywhere}
+.sv-f{fill:var(--vetro-h)}.sv-w{fill:var(--campo);stroke:var(--mut);stroke-opacity:.35}.sv-d{fill:var(--mut);opacity:.5}
+.sv-l{stroke:var(--mut);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sv-a{fill:var(--a1)}.sv-as{stroke:var(--a1);fill:none;stroke-width:2.5}.sv-sel{fill:var(--sel);stroke:var(--a2);stroke-width:1.6}
+.sv-dash{stroke:var(--mut);stroke-width:1.3;stroke-dasharray:4 3;opacity:.7}
+.sv-t{fill:var(--fg);font:600 12px "Segoe UI",system-ui,sans-serif}.sv-m{fill:var(--mut);font:11px "Segoe UI",system-ui,sans-serif}.sv-b{fill:#fff;font:600 12px "Segoe UI",system-ui,sans-serif}
 .passo.trovato{animation:trovato 1.8s ease-out}
 @keyframes trovato{0%,35%{box-shadow:0 0 0 3px var(--a1),0 0 34px var(--a2)}100%{box-shadow:var(--sh)}}
 @media (prefers-reduced-motion:reduce){.passo.trovato{animation:none;box-shadow:0 0 0 3px var(--a1)}}
 @media print{
   :root[data-tema]{--fg:#000;--mut:#555;--card:#fff;--cb:#ccc;--sh:none}
   body{background:#fff}
-  .tools,.op,#lb,#sb,#tv,.hint{display:none!important}
+  .tools,.op,#lb,#sb,#tv,#gu,.hint{display:none!important}
   .top,.passo{backdrop-filter:none;box-shadow:none}
   [data-ed]:hover,[data-ed].cambiato{background:none}
 }
@@ -1570,6 +1598,15 @@ __LOGO__
 <div class="tv-testa"><h2 id="tvt">Trova testi<small id="tvn"></small></h2><button class="ib" id="tvx" type="button" title="Chiudi (Esc)">✕</button></div>
 <input class="tv-cerca" id="tvq" type="search" placeholder="Cerca nei testi digitati…" autocomplete="off" spellcheck="false">
 <div id="tvl"></div>
+</div>
+</div>
+
+<div id="gu" hidden>
+<div class="tv-box gu-box" role="dialog" aria-modal="true" aria-labelledby="gut">
+<div class="tv-testa"><h2 id="gut">Prima di salvare: collega la cartella</h2><button class="ib" id="gux" type="button" title="Chiudi (Esc)">✕</button></div>
+<p class="gu-testo">Per creare la copia, il browser deve poter scrivere nella cartella che contiene i tuoi progetti. Windows ti farà scegliere la cartella: di solito basta farlo una volta.</p>
+<div class="gu-fig" id="gufig"></div>
+<div class="gu-piede"><button class="bt p" id="guok" type="button">Ho capito</button></div>
 </div>
 </div>
 
@@ -1701,7 +1738,7 @@ function render(){
   document.title=D.titolo;
   let dt=D.creato;
   try{dt=new Date(D.creato).toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'});}catch(e){}
-  $('#sub').textContent=reali()+' passi · '+dt+' · '+D.modalita;
+  $('#sub').textContent=reali()+' passi · '+dt+' · '+D.modalita+(D.versione?' · versione '+D.versione:'');
   const L=$('#lista');L.textContent='';
   D.passi.forEach((p,i)=>{
     if(p.tipo==='ripresa'){
@@ -1726,6 +1763,66 @@ function render(){
     f.append(im,o,x);c.append(d,m,f);a.append(n,c);L.append(a);
   });
   if(!D.passi.length)L.textContent='Nessun passo registrato.';
+}
+
+/* ---- collegamento alla cartella dei progetti: ricordata dal browser (IndexedDB), spiegata con un popup ---- */
+function dbApri(){return new Promise((ok,ko)=>{try{const r=indexedDB.open('registratore-azioni',1);r.onupgradeneeded=()=>r.result.createObjectStore('cartelle');r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error);}catch(e){ko(e);}});}
+async function dbLeggi(){
+  try{const db=await dbApri();return await new Promise(ok=>{const q=db.transaction('cartelle').objectStore('cartelle').get('radice');q.onsuccess=()=>ok(q.result||null);q.onerror=()=>ok(null);});}
+  catch(e){return null;}
+}
+async function dbScrivi(h){
+  try{const db=await dbApri();await new Promise(ok=>{const t=db.transaction('cartelle','readwrite');t.objectStore('cartelle').put(h,'radice');t.oncomplete=ok;t.onerror=ok;});}
+  catch(e){}
+}
+async function radiceCollegata(orig){
+  const h=await dbLeggi();if(!h)return null;
+  try{
+    const o={mode:'readwrite'};
+    if(await h.queryPermission(o)!=='granted'&&await h.requestPermission(o)!=='granted')return null;
+    await h.getDirectoryHandle(orig);   /* contiene davvero questo progetto? */
+    return h;
+  }catch(e){return null;}
+}
+const escH=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const FOLDER='<path d="M0 3a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2z"/>';
+function figure(){
+  const nome=String(nomeCartella()),nomeEsc=escH(nome);
+  const corto=escH(nome.length>15?nome.slice(0,14)+'…':nome);
+  return [
+  '<figure><svg viewBox="101 22 210 165" role="img" aria-label="Scegli la cartella che contiene il progetto '+nomeEsc+'">'+
+  '<rect class="sv-w" x="118" y="34" width="176" height="140" rx="12"/>'+
+  '<circle cx="130" cy="46" r="2.5" class="sv-d"/><circle cx="139" cy="46" r="2.5" class="sv-d"/><circle cx="148" cy="46" r="2.5" class="sv-d"/>'+
+  '<rect class="sv-sel" x="127" y="58" width="158" height="38" rx="10"/>'+
+  '<g class="sv-a" transform="translate(136 69)">'+FOLDER+'</g><text class="sv-t" x="164" y="82" style="font-size:11.5px">I miei progetti</text>'+
+  '<circle class="sv-a" cx="268" cy="77" r="9"/><path d="M263.5 77l3.5 3.5 6-7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'+
+  '<rect x="140" y="104" width="145" height="40" rx="10" fill="none" class="sv-dash"/>'+
+  '<g class="sv-l" transform="translate(150 114)">'+FOLDER+'</g><text class="sv-t" x="178" y="123" style="font-size:12px;fill:var(--a2)">'+corto+'<title>'+nomeEsc+'</title></text>'+
+  '<text class="sv-m" x="178" y="136">non questa</text>'+
+  '<g class="sv-l" transform="translate(150 152)"><path d="M3 0h8l5 5v11H3z"/></g><text class="sv-m" x="174" y="164">index.html</text>'+
+  '</svg><figcaption><b>1.</b> Scegli la cartella che <b>contiene</b> il progetto <b class="gu-n">«'+nomeEsc+'»</b>, non il progetto stesso.</figcaption></figure>',
+  '<figure><svg viewBox="5 22 210 165" role="img" aria-label="Premi Seleziona cartella">'+
+  '<rect class="sv-w" x="12" y="30" width="196" height="146" rx="12"/>'+
+  '<text class="sv-t" x="26" y="53">Seleziona cartella</text><line class="sv-l" x1="22" y1="62" x2="198" y2="62" opacity=".5"/>'+
+  '<rect class="sv-sel" x="22" y="70" width="176" height="30" rx="9"/><g class="sv-a" transform="translate(32 78)">'+FOLDER+'</g><text class="sv-t" x="60" y="90" style="font-size:11.5px">I miei progetti</text>'+
+  '<g class="sv-l" transform="translate(32 110)">'+FOLDER+'</g><text class="sv-m" x="60" y="122">Altre cartelle…</text>'+
+  '<rect class="sv-f" x="66" y="142" width="50" height="24" rx="12"/><text class="sv-m" x="76" y="158">Annulla</text>'+
+  '<rect class="sv-a" x="122" y="142" width="74" height="24" rx="12"/><text class="sv-b" x="131" y="158" style="font-size:11.5px">Seleziona</text>'+
+  '<rect class="sv-as" x="117" y="137" width="84" height="34" rx="17"/>'+
+  '</svg><figcaption><b>2.</b> Premi <b>Seleziona cartella</b> e, se il browser lo chiede, <b>Consenti modifiche</b>.</figcaption></figure>'
+  ].join('');
+}
+function spiegaCartella(){
+  return new Promise(ok=>{
+    $('#gufig').innerHTML=figure();
+    const fine=v=>{$('#gu').hidden=true;document.removeEventListener('keydown',tasto,true);$('#guok').onclick=$('#gux').onclick=$('#gu').onclick=null;ok(v);};
+    const tasto=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();fine(false);}};
+    document.addEventListener('keydown',tasto,true);
+    $('#guok').onclick=()=>fine(true);
+    $('#gux').onclick=()=>fine(false);
+    $('#gu').onclick=e=>{if(e.target.id==='gu')fine(false);};
+    $('#gu').hidden=false;$('#guok').focus();
+  });
 }
 
 /* ---- barra «Salva copia» ---- */
@@ -1780,7 +1877,9 @@ async function salva(){
   if(occupato||!modifiche())return;
   if(gia_unico()){avviso('Questo è un file unico: per fare una copia modificata apri index.html dalla cartella del progetto.',9000);return;}
   if(!window.showDirectoryPicker){avviso('Per salvare la copia serve Microsoft Edge o Google Chrome.',9000);return;}
-  let radice;
+  let radice=await radiceCollegata(nomeCartella());   /* già collegata in passato e ancora valida: niente domande */
+  if(!radice){
+  if(!await spiegaCartella())return;                  /* prima ti spiego cosa sta per succedere */
   try{radice=await window.showDirectoryPicker({id:'registratore-azioni',mode:'readwrite',startIn:'documents'});}
   catch(e){
     if(e.name==='AbortError')return;
@@ -1789,6 +1888,7 @@ async function salva(){
       :'Non riesco ad aprire la cartella: '+e.message,9000);
     return;
   }
+  }
   occupato=true;aggiorna();
   let creata='';   /* se qualcosa va storto a metà, tolgo la copia incompleta: niente cartelle a metà in giro */
   try{
@@ -1796,6 +1896,7 @@ async function salva(){
     let src;
     try{src=await radice.getDirectoryHandle(orig);}
     catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'», non il progetto stesso');}
+    dbScrivi(radice);   /* la ricordo: la prossima volta non serve sceglierla di nuovo */
     const radiceNome=orig.replace(/_modificato(_\d+)?$/,'')+'_modificato';
     let nome=radiceNome,k=2;
     while(await esiste(radice,nome))nome=radiceNome+'_'+(k++);
@@ -1819,7 +1920,7 @@ async function salva(){
       if(p.testo!==base.testi[i]&&!q.testo_originale)q.testo_originale=base.testi[i];
       return q;
     });
-    const dati={progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi};
+    const dati={progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,versione:D.versione||null,passi:passi};
     await scrivi(dest,'passi.json',JSON.stringify(dati,null,2));
 
     const html=paginaConDati(await testoDi(src,'index.html'),nome,passi);
@@ -1844,7 +1945,7 @@ $('#bsal').onclick=salva;
 function paginaConDati(html,nome,passi){
     const LT='<';  /* spezzo le etichette HTML: dentro uno script il browser le leggerebbe come vere */
     const blocco=LT+'!--DATI-->'+LT+'script id="dati" type="application/json">'+
-      JSON.stringify({progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,passi:passi}).replace(/</g,'\\u003c')+
+      JSON.stringify({progetto:nome,titolo:D.titolo,creato:D.creato,modalita:D.modalita,versione:D.versione||null,passi:passi}).replace(/</g,'\\u003c')+
       LT+'/script>'+LT+'!--/DATI-->';
     const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return html.replace(new RegExp(LT+'!--DATI-->[\\s\\S]*?'+LT+'!--/DATI-->'),()=>blocco)
@@ -2171,12 +2272,12 @@ render();
 
 
 def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato: str,
-                out: Path | None = None, incorpora: bool = False) -> Path:
+                out: Path | None = None, incorpora: bool = False, versione: str | None = None) -> Path:
     """Scrive la pagina del progetto. Con incorpora=True le immagini finiscono dentro la pagina (file unico)."""
     if incorpora:
         steps = [dict(st, img=_img_in_base64(Path(cartella), st["img"])) if st.get("img") else st for st in steps]
     dati = {"progetto": Path(cartella).name, "titolo": titolo, "creato": creato,
-            "modalita": nome_modo, "passi": steps}
+            "modalita": nome_modo, "versione": versione, "passi": steps}
     json_dati = json.dumps(dati, ensure_ascii=False).replace("<", "\\u003c")
     blocco = f'<!--DATI--><script id="dati" type="application/json">{json_dati}</script><!--/DATI-->'
     logo = logo_base64()
@@ -2213,7 +2314,8 @@ def esporta_unico(d: Path, dest: Path | None = None) -> Path:
     dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
     dest = Path(dest) if dest else unique_path(d.parent / f"{d.name}_unico.html")
     return genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
-                       dati.get("modalita", ""), dati.get("creato", ""), out=dest, incorpora=True)
+                       dati.get("modalita", ""), dati.get("creato", ""), out=dest, incorpora=True,
+                       versione=dati.get("versione"))
 
 
 # --------------------------------------------------------------------------
@@ -3330,7 +3432,7 @@ class App:
         try:  # rigenero la pagina cosi' i progetti vecchi hanno l'aspetto e le funzioni nuove
             dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
             genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
-                        dati.get("modalita", ""), dati.get("creato", ""))
+                        dati.get("modalita", ""), dati.get("creato", ""), versione=dati.get("versione"))
         except Exception:
             _log.exception("Errore nel preparare la pagina del progetto")
         try:
