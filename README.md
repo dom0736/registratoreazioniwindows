@@ -6,18 +6,32 @@ e alla fine crea una pagina HTML con tutti i passi, le descrizioni modificabili 
 
 Nato per rivedere a casa le lezioni di Cisco Packet Tracer, funziona con qualsiasi programma.
 
+## Novità della versione 2.1
+- Nuova guida, con lo stesso aspetto delle pagine di registrazione: schede, tema scuro/chiaro, ricerca e salti rapidi.
+- Pagina di registrazione: i pulsanti sull'immagine (apri, elimina) restano davvero invisibili finché non passi il mouse, per evitare ombre residue sotto l'immagine in tema chiaro.
+
+## Novità della versione 2.0
+- **Elimina l'ultimo passo al volo** dal pannello «Ultimi passi».
+- **Elimina un passo dalla pagina HTML**, anche nella copia `_modificato`.
+- **Esporta file unico**: una sola pagina con le immagini dentro, facile da condividere.
+- MozJPEG senza file temporanei e scrittura atomica anche delle immagini del doppio clic.
+- Corretti la pulizia delle barre di scorrimento tra una schermata e l'altra e la lunghezza del percorso in Impostazioni.
+- Nuova guida, più semplice da consultare, con indice e ricerca.
+
 ## Cosa fa
 - Uno screenshot per ogni clic, trascinamento o azione da tastiera (la rotellina del mouse è ignorata).
 - Un colore per ogni tipo di azione: rosso clic sinistro, blu destro, verde centrale, viola doppio clic, arancione trascinamento, verde acqua tastiera.
 - Tutto in una sola finestra, senza popup. Durante la registrazione resta solo una barretta piccola e trascinabile (pallino rosso fisso, pulsanti rotondi per pausa e fine), nascosta dagli screenshot. Con **Fine** la registrazione si ferma ma non si salva: puoi scegliere il nome e salvare, oppure **Riprendere** da dove eri.
 - **Solo un programma**: nella schermata iniziale, «Cosa registrare» permette di scegliere un programma aperto. Clic e tasti fatti altrove vengono ignorati (utile se trascini una finestra o ne apri un'altra senza accorgertene).
-- **Ultimi passi**: il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi registrati, aggiornato in tempo reale.
+- **Ultimi passi**: il pulsante con le tre righette sulla barretta apre un elenco degli ultimi 5 passi registrati, aggiornato in tempo reale. Una **×** accanto a ogni passo della registrazione in corso lo elimina insieme al suo screenshot (utile per un clic sbagliato).
 - Il testo digitato viene raggruppato: una riga di comando = un passo, non uno per lettera.
 - Quattro qualità (Minima, Leggera, Normale, Nitida) per tenere leggere le immagini.
-- **MozJPEG** (da Impostazioni → Compressione JPEG): file molto più piccoli a parità di leggibilità, con due cursori per qualità e dimensione. Se `cjpeg` non c'è o fallisce, si salva con il metodo standard: la registrazione non si rompe mai.
+- **MozJPEG** (da Impostazioni → Compressione JPEG): file molto più piccoli a parità di leggibilità, con due cursori per qualità e dimensione. `cjpeg` riceve l'immagine e restituisce il JPEG senza file temporanei su disco. Se non c'è o fallisce, si salva con il metodo standard: la registrazione non si rompe mai.
 - Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
 - **Stampa e salva** (icona della stampante o Ctrl+P): anteprima impaginata, scelta dei passi da includere, formato A4/Letter, verticale/orizzontale, margini, passi per pagina, cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco). Poi «Stampa / Salva PDF…» apre la finestra di stampa del browser: scegliendo «Salva come PDF» ottieni il PDF. Si può anche scaricare l'elenco dei passi in Markdown.
 - **Modifica dalla pagina HTML**: clicchi sul titolo o su una descrizione, scrivi e premi **Salva copia**: nasce la cartella `nome_modificato` accanto all'originale, che non cambia. Il browser chiede una volta di scegliere la cartella che contiene il progetto (serve Edge o Chrome).
+- **Elimina passo dalla pagina HTML**: il cestino sull'immagine di ogni passo toglie il passo; i numeri si ricalcolano e **Annulla** rimette tutto a posto. Nella copia `_modificato` non finiscono né il passo né il suo screenshot.
+- **Esporta file unico**: crea `nome_unico.html` con le immagini incorporate, da mandare come un solo allegato (WhatsApp, mail). Include le modifiche e non sostituisce la cartella del progetto.
 - **Gestione dei backup** (Impostazioni → Backup cancellati → Gestisci): elenco di tutto ciò che è stato annullato o salvato come copia di sicurezza, con data, passi e peso. Da lì si può **ripristinare** un backup tra i progetti, **aprirlo**, **eliminarlo** (con conferma) o aprire la cartella. La cartella `backup cancellati` ha un `indice.json` sempre allineato; i backup fatti con le versioni precedenti vengono aggiunti da soli, e quelli senza pagina (riprese annullate) ricevono il loro `index.html`.
 - Non sovrascrive mai nulla: se un nome esiste già aggiunge `_2`, `_3`…
 - Non lascia file in giro: i `.tmp` di una chiusura anomala e le vecchie cartelle `_MEI` dell'exe in Temp vengono tolti all'avvio successivo, i backup hanno un limite (si tolgono i più vecchi), i report vecchi sul Desktop spariscono dopo 14 giorni, una «Salva copia» fallita non lascia cartelle a metà.
@@ -36,7 +50,8 @@ Apri l'exe, scrivi il nome del progetto e premi **Avvia registrazione**.
 ## Costruirlo da soli
 Serve solo GitHub: il workflow `.github/workflows/build.yml` crea l'exe con PyInstaller a ogni push su `main`.
 Per usare un'icona personalizzata basta aggiungere un `icon.png` quadrato (512×512 va benissimo, anche più grande) nella radice del repository.
-Il file `guida.html` è la guida aperta dal pulsante Guida / F1: tienilo nel repository.
+Il file `guida.html` è la guida aperta dal pulsante Guida / F1: tienilo nel repository. Con ogni nuova versione ricordati di aggiornare il numero in `registratore.py` (`VERSION`) e in `guida.html` (titolo, intestazione, piè di pagina e oggetto della mail).
+Ogni tag `v*` pubblica una release e ne tiene solo le ultime 3, così c'è sempre una versione precedente a cui tornare. La build si ferma se `tools/cjpeg.exe` non corrisponde all'impronta SHA256 attesa nel workflow.
 Il file `marchio_registratore.txt` serve alla pulizia automatica delle cartelle temporanee: tienilo nel repository.
 Gli angoli vengono arrotondati in automatico per l'exe, la finestra e la pagina HTML. I colori dell'interfaccia seguono l'icona (grigio-blu, blu→magenta, pallino rosso). Senza `icon.png` il programma usa un'icona di riserva.
 
