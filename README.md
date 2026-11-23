@@ -11,6 +11,10 @@ Una finta schermata di Windows: sul desktop ci sono le guide delle varie sezioni
 - Si apre da **Impostazioni → Demo interattiva → Apri**, dal pulsante ▶ in alto nella Guida e dai pulsanti «Guarda la demo» di ogni sezione della Guida.
 - Alla **prima volta** che si apre il programma compare «Sembra la tua prima volta qui» con **Guarda la demo** o **Salta**. Non torna più.
 
+## Novità della versione 2.2
+- **Cerca** (prima «Trova testi»): ora cerca in tutti i passi, non solo nei testi digitati. Puoi scegliere se servono **tutte le parole**, **una qualsiasi** o una **frase esatta**; con `-parola` escludi una parola e con le virgolette cerchi una frase. Accenti ignorati, pulsante **Aa** per distinguere maiuscole e minuscole, parole trovate evidenziate. Scorciatoia **Ctrl+K**.
+- **Filtri**: dove cercare (descrizioni, testi digitati, finestre), tipo di azione, finestra, fascia oraria e «solo modificati». Si azzerano con un clic.
+
 ## Novità della versione 2.1
 - **Esporta file unico** ora si fa dal programma («Apri un progetto → Esporta file unico»): si sceglie dove salvarlo con «Salva con nome» e dentro c'è solo il progetto selezionato. Il pulsante nella pagina HTML, che chiedeva la cartella con tutti i progetti, è stato tolto.
 - Nuova guida, con lo stesso aspetto delle pagine di registrazione: schede, tema scuro/chiaro, ricerca e salti rapidi.
@@ -36,7 +40,7 @@ Una finta schermata di Windows: sul desktop ci sono le guide delle varie sezioni
 - **MozJPEG** (da Impostazioni → Compressione JPEG): file molto più piccoli a parità di leggibilità, con due cursori per qualità e dimensione. `cjpeg` riceve l'immagine e restituisce il JPEG senza file temporanei su disco. Se non c'è o fallisce, si salva con il metodo standard: la registrazione non si rompe mai.
 - Una pagina `index.html` per ogni progetto: stesso aspetto dell'app, tema scuro/chiaro, lettore immagini.
 - **Stampa e salva** (icona della stampante o Ctrl+P): anteprima impaginata, scelta dei passi da includere, formato A4/Letter, verticale/orizzontale, margini, passi per pagina, cosa mostrare (descrizioni, ora, screenshot, numero di pagina, sfondo bianco). Poi «Stampa / Salva PDF…» apre la finestra di stampa del browser: scegliendo «Salva come PDF» ottieni il PDF. Si può anche scaricare l'elenco dei passi in Markdown.
-- **Trova testi** (pagina HTML): il pulsante accanto a tema e stampa apre un elenco scorrevole di tutti i testi digitati, con numero del passo, ora e finestra. Si può cercare, copiare un testo, o cliccare una riga per andare a quel passo.
+- **Cerca** (pagina HTML): il pulsante accanto a tema e stampa apre la ricerca su tutti i passi, con combinazioni di parole e filtri (azione, finestra, ora, solo modificati). Un clic su un risultato porta a quel passo; l'icona a destra copia il testo.
 - **Modifica dalla pagina HTML**: clicchi sul titolo o su una descrizione, scrivi e premi **Salva copia**: nasce la cartella `nome_modificato` accanto all'originale, che non cambia. Il browser chiede una volta di scegliere la cartella che contiene il progetto (serve Edge o Chrome).
 - **Versione nella pagina**: sotto il titolo si legge con quale versione del programma è stata fatta la registrazione (se un progetto è ripreso con un'altra versione, compaiono entrambe).
 - **Salva copia più chiaro**: prima di aprire la scelta della cartella di Windows, un popup con due immagini spiega cosa scegliere. La cartella viene ricordata dal browser.
