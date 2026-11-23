@@ -2069,11 +2069,11 @@ def _img_in_base64(cartella: Path, rel: str) -> str:
     return f"data:{mime};base64," + base64.b64encode(f.read_bytes()).decode("ascii")
 
 
-def esporta_unico(d: Path) -> Path:
-    """Crea nomeprogetto_unico.html accanto alla cartella del progetto, con tutte le immagini dentro."""
+def esporta_unico(d: Path, dest: Path | None = None) -> Path:
+    """Crea un solo file HTML con le immagini di QUEL progetto dentro (accanto al progetto, se non scegli dove)."""
     d = Path(d)
     dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
-    dest = unique_path(d.parent / f"{d.name}_unico.html")
+    dest = Path(dest) if dest else unique_path(d.parent / f"{d.name}_unico.html")
     return genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
                        dati.get("modalita", ""), dati.get("creato", ""), out=dest, incorpora=True)
 
@@ -2689,7 +2689,7 @@ class App:
         righe = max(1, self._righe_testo(msg, 312)) if msg else 1
         self._righe_msg = righe
         y_msg = 462
-        self._scena("avvio", 380, y_msg + 14 * righe + 56, pos)
+        self._scena("avvio", 380, y_msg + 14 * righe + 72, pos)
         self.root.title(APP)
         self.root.attributes("-topmost", False)
         nascondi_da_cattura(hwnd_finestra(self.root), False)  # la finestra normale puo' essere catturata
@@ -3211,14 +3211,21 @@ class App:
             self._msg("Scegli un progetto dalla lista.", ok=False)
             return
         d = self._progetti[int(sel[0])]
+        # dove salvarlo lo scegli tu; dentro ci va solo il progetto selezionato
+        dest = filedialog.asksaveasfilename(
+            parent=self.root, title=f"Salva «{d.name}» come file unico",
+            initialdir=str(d.parent), initialfile=f"{d.name}_unico.html",
+            defaultextension=".html", filetypes=[("Pagina HTML", "*.html")])
+        if not dest:
+            return
         try:
-            out = esporta_unico(d)
+            out = esporta_unico(d, Path(dest))
         except Exception as e:
             _log.exception("Errore nell'esportazione del file unico")
             self._msg(f"Non riesco a creare il file unico: {e}", ok=False)
             return
         mb = out.stat().st_size / 1048576
-        self._msg(f"Creato «{out.name}» ({mb:.1f} MB) accanto al progetto.")
+        self._msg(f"Creato «{out.name}» ({mb:.1f} MB).")
         try:
             subprocess.Popen(f'explorer /select,"{out}"')
         except Exception:
