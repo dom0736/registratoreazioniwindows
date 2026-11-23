@@ -1513,7 +1513,6 @@ __LOGO__
 <div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
 <button class="ib" id="btema" type="button"></button>
-<button class="ib" id="bunico" type="button" title="Esporta come file unico (immagini incluse): comodo da mandare"></button>
 <button class="ib" id="bpdf" type="button" title="Stampa e salva (Ctrl+P)"></button>
 </div>
 </header>
@@ -1819,58 +1818,7 @@ async function fileEsiste(dir,nome){
   try{await dir.getFileHandle(nome);return true;}
   catch(e){if(e.name==='NotFoundError')return false;if(e.name==='TypeMismatchError')return true;throw e;}
 }
-async function esportaUnico(){
-  if(occupato)return;
-  if(gia_unico()){avviso('Questo è già un file unico.',6000);return;}
-  if(!window.showDirectoryPicker){avviso('Per esportare serve Microsoft Edge o Google Chrome.',9000);return;}
-  let radice;
-  try{radice=await window.showDirectoryPicker({id:'registratore-azioni',mode:'readwrite',startIn:'documents'});}
-  catch(e){
-    if(e.name==='AbortError')return;
-    avviso(e.name==='SecurityError'
-      ?'Il browser non permette quella cartella: scegli la cartella dei progetti (non Documenti o Desktop).'
-      :'Non riesco ad aprire la cartella: '+e.message,9000);
-    return;
-  }
-  occupato=true;aggiorna();
-  let creato='';
-  try{
-    const orig=nomeCartella();
-    let src;
-    try{src=await radice.getDirectoryHandle(orig);}
-    catch(e){throw new Error('scegli la cartella che CONTIENE «'+orig+'», non il progetto stesso');}
-    const sorg=await src.getDirectoryHandle('immagini');
-    const passi=[];let fatti=0;const tot=reali();
-    for(const p of D.passi){
-      const q=Object.assign({},p);
-      if(p.tipo!=='ripresa'&&p.img){
-        avviso('Incorporo le immagini '+(++fatti)+' / '+tot+'…');
-        const nomeImg=p.img.split('/').pop();
-        const f=await (await sorg.getFileHandle(nomeImg)).getFile();
-        const ext=nomeImg.split('.').pop().toLowerCase();
-        q.img='data:'+(MIME[ext]||f.type||'image/jpeg')+';base64,'+await inBase64(f);
-      }
-      passi.push(q);
-    }
-    let html=paginaConDati(await testoDi(src,'index.html'),orig,passi);
-    const radiceNome=orig.replace(/_modificato(_\d+)?$/,'')+'_unico';
-    let nome=radiceNome+'.html',k=2;
-    while(await fileEsiste(radice,nome))nome=radiceNome+'_'+(k++)+'.html';
-    creato=nome;
-    await scrivi(radice,nome,html);
-    creato='';
-    occupato=false;
-    const mb=(html.length/1048576).toFixed(1).replace('.',',');
-    avviso('✓ Creato «'+nome+'» ('+mb+' MB) nella cartella scelta. Si apre da solo, senza la cartella immagini.',12000);
-  }catch(e){
-    occupato=false;
-    if(creato){try{await radice.removeEntry(creato);}catch(_){}}
-    avviso('Non sono riuscito a esportare: '+e.message,12000);
-  }
-}
-$('#bunico').innerHTML=svg('unico');
-$('#bunico').onclick=esportaUnico;
-if(gia_unico())$('#bunico').style.display='none';   /* è già un file unico */
+
 
 
 /* ---- lettore immagini ---- */
@@ -2084,7 +2032,11 @@ render();
 """
 
 
-def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato: str) -> Path:
+def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato: str,
+                out: Path | None = None, incorpora: bool = False) -> Path:
+    """Scrive la pagina del progetto. Con incorpora=True le immagini finiscono dentro la pagina (file unico)."""
+    if incorpora:
+        steps = [dict(st, img=_img_in_base64(Path(cartella), st["img"])) if st.get("img") else st for st in steps]
     dati = {"progetto": Path(cartella).name, "titolo": titolo, "creato": creato,
             "modalita": nome_modo, "passi": steps}
     json_dati = json.dumps(dati, ensure_ascii=False).replace("<", "\\u003c")
@@ -2103,9 +2055,27 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
               .replace("__LOGO__", img_logo)
               .replace("__COLORI_CSS__", colori_css)
               .replace("__DATI__", blocco))
-    out = Path(cartella) / "index.html"
+    out = Path(out) if out else Path(cartella) / "index.html"
     scrivi_testo_atomico(out, pagina)
     return out
+
+
+_MIME_IMG = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def _img_in_base64(cartella: Path, rel: str) -> str:
+    f = Path(cartella) / rel
+    mime = _MIME_IMG.get(f.suffix.lower(), "image/jpeg")
+    return f"data:{mime};base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+
+
+def esporta_unico(d: Path) -> Path:
+    """Crea nomeprogetto_unico.html accanto alla cartella del progetto, con tutte le immagini dentro."""
+    d = Path(d)
+    dati = json.loads((d / "passi.json").read_text(encoding="utf-8"))
+    dest = unique_path(d.parent / f"{d.name}_unico.html")
+    return genera_html(d, dati.get("titolo") or d.name, dati.get("passi", []),
+                       dati.get("modalita", ""), dati.get("creato", ""), out=dest, incorpora=True)
 
 
 # --------------------------------------------------------------------------
@@ -3187,6 +3157,7 @@ class App:
                         c["mut"], anchor="center", justify="center")
         self.lb = lb
         self._bottone(34, 328, 140, 32, "Altra cartella…", self._altra_cartella, font=FONT)
+        self._bottone(190, 328, 156, 32, "Esporta file unico", self._esporta_unico_selezionato, font=FONT)
         self._bottone(34, 372, 153, 44, "Apri", self._apri_selezionato, primario=True)
         self._bottone(193, 372, 153, 44, "Riprendi", self._riprendi_selezionato)
         self._testo(190, 428, "Apri: guarda  ·  Riprendi: continua a registrare", FONT_S, c["mut"], anchor="n")
@@ -3230,6 +3201,28 @@ class App:
             self._msg(f"Non riesco ad aprire la pagina: {e}", ok=False)
             return
         self._scena_avvio(msg=f"Aperto «{d.name}».")
+
+    def _esporta_unico_selezionato(self):
+        """Crea un solo file HTML con le immagini dentro, accanto alla cartella del progetto."""
+        if self.scena != "progetti":
+            return
+        sel = self.lb.curselection()
+        if not sel:
+            self._msg("Scegli un progetto dalla lista.", ok=False)
+            return
+        d = self._progetti[int(sel[0])]
+        try:
+            out = esporta_unico(d)
+        except Exception as e:
+            _log.exception("Errore nell'esportazione del file unico")
+            self._msg(f"Non riesco a creare il file unico: {e}", ok=False)
+            return
+        mb = out.stat().st_size / 1048576
+        self._msg(f"Creato «{out.name}» ({mb:.1f} MB) accanto al progetto.")
+        try:
+            subprocess.Popen(f'explorer /select,"{out}"')
+        except Exception:
+            pass
 
     def _riprendi_selezionato(self):
         if self.scena != "progetti":
