@@ -40,7 +40,7 @@ from pynput.keyboard import Key
 from pynput.mouse import Button
 
 APP = "Registratore Azioni"
-VERSION = "2.1"
+VERSION = "2.2"
 EMAIL = "domenico.castaldod29@gmail.com"
 
 # Coordinate del mouse e pixel dello schermo devono coincidere (schermi HiDPI)
@@ -1444,19 +1444,38 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
 #lbc{position:fixed;bottom:0;left:0;right:0;padding:14px 70px;color:#ddd;font-size:.85rem;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
 @media (max-width:560px){.top{flex-wrap:wrap}.tools{margin-left:auto}.passo{grid-template-columns:1fr}}
 
-/* ---- popup «Trova testi» ---- */
+/* ---- popup «Cerca» ---- */
 #tv,#gu{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;padding:18px;
   background:rgba(8,12,20,.6);backdrop-filter:blur(4px)}
 #tv[hidden],#gu[hidden]{display:none}
-.tv-box{width:min(620px,100%);max-height:min(720px,100%);display:flex;flex-direction:column;border-radius:24px;overflow:hidden;
+.tv-box{width:min(680px,100%);max-height:min(720px,100%);display:flex;flex-direction:column;border-radius:24px;overflow:hidden;
   background:var(--campo);color:var(--fg);border:1px solid var(--cb);box-shadow:0 24px 60px rgba(0,0,0,.45)}
 .tv-testa{display:flex;align-items:center;gap:12px;padding:16px 18px 10px}
 .tv-testa h2{margin:0;font-size:1.1rem;flex:1}
 .tv-testa small{color:var(--mut);font-weight:400;font-size:.8rem;margin-left:6px}
-.tv-cerca{margin:0 18px 12px;padding:10px 16px;border-radius:999px;border:1px solid var(--cb);background:var(--vetro);
+.tv-riga{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 18px 10px}
+.tv-cerca{flex:1;min-width:0;margin:0;padding:10px 16px;border-radius:999px;border:1px solid var(--cb);background:var(--vetro);
   color:var(--fg);font:inherit;font-size:.9rem;outline:none}
 .tv-cerca:focus{box-shadow:0 0 0 2px var(--a1)}
 .tv-cerca::placeholder{color:var(--mut)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cb);background:var(--vetro);color:var(--fg);border-radius:999px;
+  padding:5px 12px;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer;--az:#3d6fff;transition:background .12s}
+.chip:hover{background:var(--vetro-h)}
+.chip[aria-pressed="true"]{color:#fff;border-color:transparent;background:linear-gradient(90deg,var(--a1),var(--a2))}
+.chip i{width:9px;height:9px;border-radius:50%;background:var(--az);box-shadow:0 0 0 1.5px rgba(255,255,255,.55)}
+.chip.fl[aria-expanded="true"]{background:var(--vetro-h)}
+.chip.aa{padding:9px 13px}
+.tv-aiuto{margin:-2px 20px 8px;color:var(--mut);font-size:.72rem}
+.tv-filtri{display:grid;gap:9px;margin:0 18px 10px;padding:12px 14px;border-radius:16px;border:1px solid var(--cb);background:var(--vetro);
+  max-height:38vh;overflow:auto}
+.tv-filtri[hidden]{display:none}
+.tv-g{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center}
+.tv-g>span{color:var(--mut);font-size:.75rem;font-weight:600}
+.tv-ch{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tv-filtri select,.tv-filtri input[type=time]{border:1px solid var(--cb);border-radius:10px;background:var(--campo);color:var(--fg);
+  font:inherit;font-size:.8rem;padding:5px 8px;max-width:100%;color-scheme:inherit}
+.tv-filtri select{width:100%}
+.tv-box mark{background:var(--a1);color:#fff;border-radius:4px;padding:0 2px}
 #tvl{flex:1;min-height:0;overflow:auto;padding:0 10px 14px 14px;margin-right:4px;
   scrollbar-width:thin;scrollbar-color:var(--a1) transparent}
 #tvl::-webkit-scrollbar{width:10px}
@@ -1468,7 +1487,8 @@ figure:hover .op,figure:focus-within .op{opacity:1;visibility:visible}
   transition:background .12s,box-shadow .12s}
 .tv-r:hover,.tv-r:focus-visible{background:var(--vetro-h);outline:none;box-shadow:0 0 0 2px var(--a1)}
 .tv-r .n{width:30px;height:30px;font-size:.75rem;grid-row:span 2}
-.tv-t{font:600 .88rem Consolas,"Cascadia Mono",monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+.tv-t{font-weight:600;font-size:.9rem;overflow-wrap:anywhere}
+.tv-t.dig{font:600 .88rem Consolas,"Cascadia Mono",monospace;white-space:pre-wrap}
 .tv-t i{font:inherit;font-weight:400;color:var(--mut);font-style:normal}
 .tv-m{grid-column:2;color:var(--mut);font-size:.75rem;overflow-wrap:anywhere}
 .tv-c{grid-column:3;grid-row:1 / span 2;width:32px;height:32px}
@@ -1579,7 +1599,7 @@ html[data-tema=chiaro] .foglio.tema{background:#f5f7fb;color:#1b2740}
 __LOGO__
 <div class="tit"><h1 id="titolo"></h1><div id="sub"></div></div>
 <div class="tools">
-<button class="ib lbl" id="btv" type="button" title="Elenco di tutti i testi digitati: clicca per andare al passo"><span id="btvi"></span>Trova testi</button>
+<button class="ib lbl" id="btv" type="button" title="Cerca nei passi (Ctrl+K)"><span id="btvi"></span>Cerca</button>
 <button class="ib" id="btema" type="button"></button>
 <button class="ib" id="bpdf" type="button" title="Stampa e salva (Ctrl+P)"></button>
 </div>
@@ -1596,8 +1616,25 @@ __LOGO__
 
 <div id="tv" hidden>
 <div class="tv-box" role="dialog" aria-modal="true" aria-labelledby="tvt">
-<div class="tv-testa"><h2 id="tvt">Trova testi<small id="tvn"></small></h2><button class="ib" id="tvx" type="button" title="Chiudi (Esc)">✕</button></div>
-<input class="tv-cerca" id="tvq" type="search" placeholder="Cerca nei testi digitati…" autocomplete="off" spellcheck="false">
+<div class="tv-testa"><h2 id="tvt">Cerca<small id="tvn"></small></h2><button class="ib" id="tvx" type="button" title="Chiudi (Esc)">✕</button></div>
+<div class="tv-riga"><input class="tv-cerca" id="tvq" type="search" placeholder="Cerca parole nei passi…" autocomplete="off" spellcheck="false"><button class="chip aa" id="tvcs" type="button" aria-pressed="false" title="Distingui maiuscole e minuscole">Aa</button></div>
+<div class="tv-riga" id="tvm">
+<button class="chip" type="button" data-m="all" aria-pressed="true">Tutte le parole</button>
+<button class="chip" type="button" data-m="any" aria-pressed="false">Una qualsiasi</button>
+<button class="chip" type="button" data-m="frase" aria-pressed="false">Frase esatta</button>
+<button class="chip fl" id="tvfb" type="button" aria-expanded="true">Filtri</button>
+</div>
+<p class="tv-aiuto">-parola esclude una parola · "tra virgolette" cerca una frase</p>
+<div class="tv-filtri" id="tvf">
+<div class="tv-g"><span>Cerca in</span><div class="tv-ch" id="tvd">
+<button class="chip" type="button" data-d="desc" aria-pressed="true">Descrizioni</button>
+<button class="chip" type="button" data-d="dig" aria-pressed="true">Testi digitati</button>
+<button class="chip" type="button" data-d="fin" aria-pressed="true">Finestre</button></div></div>
+<div class="tv-g"><span>Azione</span><div class="tv-ch" id="tvaz"></div></div>
+<div class="tv-g"><span>Finestra</span><select id="tvfin"></select></div>
+<div class="tv-g"><span>Ora</span><div class="tv-ch"><input type="time" id="tvda" title="Dalle"><span>–</span><input type="time" id="tvaa" title="Alle"></div></div>
+<div class="tv-g"><span>Altro</span><div class="tv-ch"><button class="chip" type="button" id="tvmod" aria-pressed="false" title="Passi con la descrizione cambiata">Solo modificati</button><button class="chip" type="button" id="tvres">Azzera filtri</button></div></div>
+</div>
 <div id="tvl"></div>
 </div>
 </div>
@@ -1996,63 +2033,142 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-/* ---- Trova testi: elenco di tutto ciò che è stato digitato, clic = vai a quel passo ---- */
+/* ---- Cerca: parole, combinazioni e filtri su tutti i passi; clic = vai a quel passo ---- */
+const NOMI_AZ=__AZIONI__;
 /* un passo di testo si chiama «Digitato «…»» o «Digitato «…» e premuto Invio»: lo riconosco dal testo originale,
-   così resta nell'elenco anche se hai cambiato la descrizione (che ti mostro com'è ora) */
+   così resta trovabile anche se hai cambiato la descrizione */
 const RE_DIG=/^Digitato «([\s\S]*)»(?: e premuto ([^»]+))?$/;
-function testiDigitati(){
+const F={modo:'all',cs:false,dove:new Set(['desc','dig','fin']),az:new Set(),fin:'',da:null,a:null,mod:false};
+let tvAperto=false;
+const piega=(t,cs)=>{const r=Array.from(t).map(c=>{const f=c.normalize('NFD').replace(/[\u0300-\u036f]/g,'');return f.length===1?f:c;}).join('');return cs?r:r.toLowerCase();};
+const secondi=t=>{const m=/^(\d+):(\d+)(?::(\d+))?/.exec(t||'');return m?(+m[1])*3600+(+m[2])*60+(+(m[3]||0)):null;};
+function vociTv(){
   const r=[];
   D.passi.forEach((p,i)=>{
     if(p.tipo==='ripresa'){r.push({sep:true,t:p.testo});return;}
-    const o=RE_DIG.exec(p.testo_originale||base.testi[i]||p.testo);
-    if(!o)return;
-    const c=RE_DIG.exec(p.testo)||o;
-    r.push({i:i,n:p.n,t:c[1],fine:c[2]||'',ora:p.ora,fin:p.finestra||'',mod:c===o&&p.testo!==(p.testo_originale||base.testi[i])});
+    const orig=p.testo_originale||base.testi[i]||p.testo;
+    const o=RE_DIG.exec(orig),c=o?(RE_DIG.exec(p.testo)||o):null;
+    r.push({i:i,n:p.n,az:az(p),desc:p.testo,dig:c?c[1]:null,fine:c?(c[2]||''):'',ora:p.ora||'',sec:secondi(p.ora),fin:p.finestra||'',mod:p.testo!==orig});
   });
   return r;
 }
-let tvAperto=false;
-function disegnaTv(){
-  const q=$('#tvq').value.trim().toLowerCase();
-  const tutti=testiDigitati(),voci=tutti.filter(x=>!x.sep);
-  const L=$('#tvl');L.textContent='';
-  $('#tvn').textContent=voci.length?(voci.length===1?'1 testo':voci.length+' testi'):'';
-  if(!voci.length){
-    const v=document.createElement('p');v.className='tv-vuoto';
-    v.textContent="In questo progetto non c'è nessun testo digitato.";L.append(v);return;
+function leggiQuery(testo){
+  const q=testo.trim(),pos=[],neg=[];
+  if(!q)return{pos:pos,neg:neg};
+  if(F.modo==='frase'){pos.push(piega(q.replace(/^"([\s\S]*)"$/,'$1'),F.cs));return{pos:pos,neg:neg};}
+  (q.match(/-?"[^"]*"|\S+/g)||[]).forEach(t=>{
+    let n=false;
+    if(t.length>1&&t[0]==='-'){n=true;t=t.slice(1);}
+    t=t.replace(/^"|"$/g,'');
+    if(t)(n?neg:pos).push(piega(t,F.cs));
+  });
+  return{pos:pos,neg:neg};
+}
+function filtriAttivi(){
+  return (F.dove.size<3?1:0)+(F.az.size?1:0)+(F.fin?1:0)+(F.da!==null||F.a!==null?1:0)+(F.mod?1:0);
+}
+function passa(x,Q){
+  if(F.az.size&&!F.az.has(x.az))return false;
+  if(F.fin&&x.fin!==F.fin)return false;
+  if((F.da!==null||F.a!==null)&&x.sec===null)return false;
+  if(F.da!==null&&x.sec<F.da)return false;
+  if(F.a!==null&&x.sec>F.a)return false;
+  if(F.mod&&!x.mod)return false;
+  if(!Q.pos.length&&!Q.neg.length)return true;
+  const c=[];
+  if(F.dove.has('desc'))c.push(x.desc);
+  if(F.dove.has('dig')&&x.dig!==null)c.push(x.dig);
+  if(F.dove.has('fin'))c.push(x.fin);
+  const h=piega(c.join('\n'),F.cs);
+  if(Q.neg.some(t=>h.includes(t)))return false;
+  if(!Q.pos.length)return true;
+  return F.modo==='any'?Q.pos.some(t=>h.includes(t)):Q.pos.every(t=>h.includes(t));
+}
+function evidenzia(el,testo,Q){
+  const h=piega(testo,F.cs),iv=[];
+  if(Q.pos.length&&h.length===testo.length){
+    Q.pos.forEach(t=>{let k=0;while(t&&(k=h.indexOf(t,k))>=0){iv.push([k,k+t.length]);k+=t.length;}});
   }
+  if(!iv.length){el.append(document.createTextNode(testo));return;}
+  iv.sort((a,b)=>a[0]-b[0]);
+  const m=[iv[0]];
+  for(let k=1;k<iv.length;k++){const u=m[m.length-1];if(iv[k][0]<=u[1])u[1]=Math.max(u[1],iv[k][1]);else m.push(iv[k]);}
+  let p=0;
+  m.forEach(r=>{
+    if(r[0]>p)el.append(document.createTextNode(testo.slice(p,r[0])));
+    const e=document.createElement('mark');e.textContent=testo.slice(r[0],r[1]);el.append(e);p=r[1];
+  });
+  if(p<testo.length)el.append(document.createTextNode(testo.slice(p)));
+}
+function costruisciFiltri(){
+  const reali=vociTv().filter(x=>!x.sep);
+  const usate=Object.keys(NOMI_AZ).filter(k=>k!=='ripresa'&&reali.some(x=>x.az===k));
+  [...F.az].forEach(k=>{if(!usate.includes(k))F.az.delete(k);});
+  const C=$('#tvaz');C.textContent='';
+  usate.forEach(k=>{
+    const b=document.createElement('button');b.type='button';b.className='chip';b.dataset.az=k;
+    b.setAttribute('aria-pressed',F.az.has(k)?'true':'false');
+    const i=document.createElement('i');b.append(i,document.createTextNode(NOMI_AZ[k]));
+    b.onclick=()=>{if(F.az.has(k))F.az.delete(k);else F.az.add(k);b.setAttribute('aria-pressed',F.az.has(k)?'true':'false');disegnaTv();};
+    C.append(b);
+  });
+  const fin=[...new Set(reali.map(x=>x.fin).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(F.fin&&!fin.includes(F.fin))F.fin='';
+  const S=$('#tvfin');S.textContent='';
+  const o0=document.createElement('option');o0.value='';o0.textContent='Tutte';S.append(o0);
+  fin.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;S.append(o);});
+  S.value=F.fin;
+}
+function disegnaTv(){
+  const Q=leggiQuery($('#tvq').value);
+  const tutti=vociTv(),voci=tutti.filter(x=>!x.sep);
+  const L=$('#tvl');L.textContent='';
+  const nf=filtriAttivi();
+  $('#tvfb').textContent=nf?'Filtri · '+nf:'Filtri';
+  if(!voci.length){
+    $('#tvn').textContent='';
+    const v=document.createElement('p');v.className='tv-vuoto';
+    v.textContent='Non ci sono passi da cercare.';L.append(v);return;
+  }
+  const attiva=!!(Q.pos.length||Q.neg.length||nf);
   let trovati=0,sep=null;
   tutti.forEach(x=>{
     if(x.sep){sep=x;return;}
-    if(q&&!(x.t+' '+x.fine+' '+x.fin+' '+x.ora).toLowerCase().includes(q))return;
-    if(sep&&!q){const s=document.createElement('div');s.className='tv-sep';s.textContent=sep.t;L.append(s);}
+    if(!passa(x,Q))return;
+    if(sep&&!attiva){const s=document.createElement('div');s.className='tv-sep';s.textContent=sep.t;L.append(s);}
     sep=null;trovati++;
-    const b=document.createElement('button');b.type='button';b.className='tv-r';b.dataset.az=az(D.passi[x.i]);
+    const b=document.createElement('button');b.type='button';b.className='tv-r';b.dataset.az=x.az;
     const n=document.createElement('span');n.className='n';n.textContent=pad(x.n);
     const t=document.createElement('span');t.className='tv-t';
-    t.append(document.createTextNode(x.t));
-    if(x.fine){const f=document.createElement('i');f.textContent='  ⏎ '+x.fine;t.append(f);}
-    const m=document.createElement('span');m.className='tv-m';m.textContent=x.ora+(x.fin?' · '+x.fin:'');
+    if(x.dig!==null){
+      t.classList.add('dig');evidenzia(t,x.dig,Q);
+      if(x.fine){const f=document.createElement('i');f.textContent='  ⏎ '+x.fine;t.append(f);}
+    }else evidenzia(t,x.desc,Q);
+    const m=document.createElement('span');m.className='tv-m';
+    m.append(document.createTextNode((NOMI_AZ[x.az]||'')+' · '+x.ora));
+    if(x.fin){m.append(document.createTextNode(' · '));const w=document.createElement('span');evidenzia(w,x.fin,Q);m.append(w);}
     const c=document.createElement('span');c.className='ib tv-c';c.title='Copia il testo';c.innerHTML=svg('copia');
+    const daCopiare=x.dig!==null?x.dig:x.desc;
     c.addEventListener('click',e=>{
       e.stopPropagation();
       const fatto=()=>{c.title='Copiato!';c.style.color='var(--ok)';setTimeout(()=>{c.title='Copia il testo';c.style.color='';},1200);};
-      try{navigator.clipboard.writeText(x.t).then(fatto,()=>{});}catch(_){}
+      try{navigator.clipboard.writeText(daCopiare).then(fatto,()=>{});}catch(_){}
     });
     b.append(n,t,c,m);
     b.addEventListener('click',()=>vaiAlPasso(x.i));
     L.append(b);
   });
+  $('#tvn').textContent=attiva?trovati+' di '+voci.length+' passi':(voci.length===1?'1 passo':voci.length+' passi');
   if(!trovati){
     const v=document.createElement('p');v.className='tv-vuoto';
-    v.textContent='Nessun testo corrisponde a «'+$('#tvq').value.trim()+'».';L.append(v);
+    v.textContent=nf&&!$('#tvq').value.trim()?'Nessun passo corrisponde ai filtri.':'Nessun passo corrisponde alla ricerca.';L.append(v);
   }
 }
 function apriTv(){
-  if(tvAperto)return;
-  tvAperto=true;$('#tvq').value='';disegnaTv();
+  if(tvAperto||cur>=0||aperta())return;
+  tvAperto=true;costruisciFiltri();disegnaTv();
   $('#tv').hidden=false;document.body.style.overflow='hidden';
-  $('#tvq').focus();
+  $('#tvq').focus();$('#tvq').select();
 }
 function chiudiTv(){
   if(!tvAperto)return;
@@ -2067,11 +2183,34 @@ function vaiAlPasso(i){
   el.classList.remove('trovato');void el.offsetWidth;el.classList.add('trovato');
   setTimeout(()=>el.classList.remove('trovato'),2000);
 }
+function azzeraFiltri(){
+  F.dove=new Set(['desc','dig','fin']);F.az.clear();F.fin='';F.da=F.a=null;F.mod=false;
+  $('#tvda').value='';$('#tvaa').value='';$('#tvmod').setAttribute('aria-pressed','false');
+  document.querySelectorAll('#tvd .chip').forEach(b=>b.setAttribute('aria-pressed','true'));
+  costruisciFiltri();disegnaTv();
+}
 $('#btvi').innerHTML=svg('cerca');
 $('#btv').onclick=apriTv;
 $('#tvx').onclick=chiudiTv;
 $('#tv').addEventListener('click',e=>{if(e.target.id==='tv')chiudiTv();});
 $('#tvq').addEventListener('input',disegnaTv);
+document.querySelectorAll('#tvm [data-m]').forEach(b=>b.onclick=()=>{
+  F.modo=b.dataset.m;
+  document.querySelectorAll('#tvm [data-m]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+  disegnaTv();
+});
+$('#tvcs').onclick=()=>{F.cs=!F.cs;$('#tvcs').setAttribute('aria-pressed',F.cs?'true':'false');disegnaTv();};
+$('#tvfb').onclick=()=>{const f=$('#tvf');f.hidden=!f.hidden;$('#tvfb').setAttribute('aria-expanded',f.hidden?'false':'true');};
+document.querySelectorAll('#tvd [data-d]').forEach(b=>b.onclick=()=>{
+  const k=b.dataset.d;
+  if(F.dove.has(k)){if(F.dove.size===1)return;F.dove.delete(k);}else F.dove.add(k);
+  b.setAttribute('aria-pressed',F.dove.has(k)?'true':'false');disegnaTv();
+});
+$('#tvfin').onchange=()=>{F.fin=$('#tvfin').value;disegnaTv();};
+$('#tvda').oninput=()=>{F.da=secondi($('#tvda').value);disegnaTv();};
+$('#tvaa').oninput=()=>{const s=secondi($('#tvaa').value);F.a=s===null?null:s+59;disegnaTv();};
+$('#tvmod').onclick=()=>{F.mod=!F.mod;$('#tvmod').setAttribute('aria-pressed',F.mod?'true':'false');disegnaTv();};
+$('#tvres').onclick=azzeraFiltri;
 $('#tvq').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const b=document.querySelector('#tvl .tv-r');if(b)b.click();}
   else if(e.key==='ArrowDown'){const b=document.querySelector('#tvl .tv-r');if(b){e.preventDefault();b.focus();}}
@@ -2083,7 +2222,10 @@ $('#tvl').addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){if(t[k+1])t[k+1].focus();}
   else if(k>0)t[k-1].focus();else $('#tvq').focus();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&tvAperto){e.preventDefault();chiudiTv();}});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&tvAperto){e.preventDefault();chiudiTv();}
+  else if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==='k'){e.preventDefault();apriTv();}
+});
 
 /* ---- stampa e salva: anteprima impaginata, scelta dei passi, opzioni ---- */
 const CARTE={a4:[793,1122],letter:[816,1056]};   /* px a 96 dpi, arrotondati per difetto: niente pagina bianca in più */
@@ -2286,7 +2428,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
     img_logo = f'<img class="logo" alt="" src="data:image/png;base64,{logo}">' if logo else ""
     tema = TEMA_HTML if TEMA_HTML in ("scuro", "chiaro") else "scuro"
     colori_css = "\n".join(
-        f".passo[data-az={k}],.pb[data-az={k}],.tv-r[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
+        f".passo[data-az={k}],.pb[data-az={k}],.tv-r[data-az={k}],.chip[data-az={k}]{{--az:#{r:02x}{g:02x}{b:02x}}}"
         for k, (_nome, (r, g, b)) in AZIONI.items())
     pagina = (HTML_TEMPLATE
               .replace("__TEMA__", tema)
@@ -2294,6 +2436,7 @@ def genera_html(cartella: Path, titolo: str, steps: list, nome_modo: str, creato
               .replace("__FAVICON__", favicon)
               .replace("__LOGO__", img_logo)
               .replace("__COLORI_CSS__", colori_css)
+              .replace("__AZIONI__", json.dumps({k: v[0] for k, v in AZIONI.items()}, ensure_ascii=False))
               .replace("__DATI__", blocco))
     out = Path(out) if out else Path(cartella) / "index.html"
     scrivi_testo_atomico(out, pagina)
@@ -3093,7 +3236,7 @@ class App:
         if not era_qui:
             self._dig_conf = False
         conf = bool(getattr(self, "_dig_conf", False)) and dig_on  # sto chiedendo conferma per spegnere il testo digitato
-        avviso = ("Se lo spegni, le lettere che digiti non vengono salvate: nei passi e in «Trova testi» "
+        avviso = ("Se lo spegni, le lettere che digiti non vengono salvate: nei passi e in «Cerca» "
                   "ci saranno solo pallini (•••) e dopo non si potranno più recuperare.")
         righe_av = self._righe_testo(avviso, X1 - X0) if conf else 0
         altezze = (80, 62, 62, 42 + 15 * righe_av + 58 if conf else 62, 62, 62, 62, 62)
